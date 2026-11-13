@@ -2,46 +2,100 @@
    :root, so the dialog looks the same when the editor opens it outside the dashboard shell. */
 @import '../dashboard/dash-list.css';
 
-/* ---- Posts page: two sections, one row per clip. */
-.posts-page { display: flex; flex-direction: column; gap: 26px; }
-.posts-section { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
-.posts-section-head { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px; }
-.posts-section-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
-.posts-section-head > span { color: var(--dash-muted); font-size: 14px; }
-.posts-section-head [data-slot=button] { margin-left: auto; }
-.posts-empty-action { margin-top: 12px; }
-.posts-list[data-slot=card] { gap: 0; padding: 0; }
-.posts-list ul { margin: 0; padding: 0; list-style: none; }
-/* Every row uses the same fixed tracks, so the columns line up across the Scheduled and Posted cards. */
-.posts-row { display: grid; grid-template-columns: 30px minmax(0, 2.3fr) minmax(104px, .9fr) minmax(128px, 1.05fr) minmax(150px, 1.35fr) minmax(88px, .75fr) 100px; align-items: center; column-gap: 14px; min-height: 72px; padding: 10px 12px 10px 16px; font-size: 14px; }
-.posts-row + .posts-row { border-top: 1px solid var(--dash-divider); }
-.posts-thumb .workspace-chat-cover { display: grid; place-items: center; width: 30px; height: 52px; overflow: hidden; border-radius: 5px; background: var(--dash-pill); color: var(--dash-muted); }
-.posts-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
-.posts-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 15px; }
-/* The caption shortens; the tag saying the assistant made the post always stays whole. */
-.posts-caption:has(.posts-by) { display: flex; align-items: center; gap: 8px; }
-.posts-caption:has(.posts-by) > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.posts-by { flex-shrink: 0; }
-.posts-accounts { display: flex; align-items: center; min-width: 0; }
-.posts-accounts .account-avatar + .account-avatar { margin-left: -4px; }
-.posts-accounts .account-avatar [data-slot=avatar] { width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--dash-card); }
-.posts-accounts .account-avatar [data-slot=avatar-fallback] { font-size: 10px; }
-.posts-accounts-more { margin-left: 8px; color: var(--dash-muted); font-size: 13px; }
-.posts-time { color: var(--dash-muted); white-space: nowrap; }
-.posts-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.posts-status > span { display: inline-flex; align-items: center; gap: 7px; color: var(--dash-text); white-space: nowrap; }
-.posts-status svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
-.posts-status small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-muted); font-size: 13px; }
-.posts-views { color: var(--dash-text); white-space: nowrap; }
-.posts-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-/* A narrow list (a phone, or a small window beside the sidebar) stacks each row into three lines. */
-@container (max-width: 860px) {
-  .posts-row { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "thumb caption actions" "thumb accounts time" "thumb status views"; column-gap: 12px; row-gap: 6px; padding: 12px 10px 12px 14px; }
-  .posts-thumb { grid-area: thumb; align-self: start; } .posts-caption { grid-area: caption; } .posts-accounts { grid-area: accounts; } .posts-time { grid-area: time; }
-  .posts-status { grid-area: status; align-self: start; } .posts-views { grid-area: views; } .posts-actions { grid-area: actions; min-height: 32px; }
-  .posts-time, .posts-views { justify-self: end; font-size: 13px; }
-  .posts-status small { white-space: normal; }
+/* ---- Posts page header: title, week navigation, New post, and the accounts being posted to. */
+.posts-head { display: flex; flex-direction: column; gap: 14px; }
+.posts-head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 36px; }
+.posts-head h1 { margin: 0; color: var(--dash-text); font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
+.posts-week-nav { display: flex; align-items: center; gap: 4px; padding-left: 12px; }
+.posts-week-nav > span { min-width: 92px; text-align: center; color: var(--dash-text); font-size: 13.5px; font-weight: 500; white-space: nowrap; }
+.posts-week-nav [data-slot=button][data-variant=ghost] { width: 26px; height: 26px; color: #9A9A9A; }
+.posts-week-nav [data-slot=button][data-variant=ghost] svg { width: 16px; height: 16px; }
+.posts-week-nav [data-slot=button][data-variant=ghost]:hover { background: var(--dash-pill); color: var(--dash-text); }
+.posts-page [data-slot=button].posts-today { height: 26px; padding: 0 9px; border-radius: 6px; background: var(--dash-pill); color: #fff; font-size: 12px; font-weight: 400; }
+.posts-page [data-slot=button].posts-today:hover { background: var(--dash-pill-hover); }
+.posts-page [data-slot=button][data-variant=primary].posts-new { margin-left: auto; height: 36px; padding: 0 14px; gap: 7px; border-radius: 8px; font-size: 13px; }
+.posts-page [data-slot=button][data-variant=primary].posts-new svg { width: 14px; height: 14px; }
+.posts-accounts-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.posts-accounts-label { color: #666; font-size: 12px; }
+.posts-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 8px; border: 1px solid #FFFFFF0D; border-radius: 8px; background: #151515; color: var(--dash-text); font-size: 12.5px; }
+.posts-chip > svg { width: 13px; height: 13px; flex-shrink: 0; color: #fff; }
+.posts-chip-name { white-space: nowrap; }
+.posts-chip:is([data-state=expired], [data-state=none]) { padding-right: 4px; }
+.posts-chip[data-state=expired] { border-color: #E9A23B55; }
+.posts-chip[data-state=none] .posts-chip-name { color: #9A9A9A; }
+.posts-page [data-slot=button].posts-chip-action { height: 24px; padding: 0 8px; border-radius: 6px; background: var(--dash-pill); color: #fff; font-size: 11.5px; font-weight: 500; }
+.posts-page [data-slot=button].posts-chip-action:hover { background: var(--dash-pill-hover); }
+.posts-chip[data-state=expired] [data-slot=button].posts-chip-action { background: #3A2A12; color: #F2C27A; }
+.posts-chip[data-state=expired] [data-slot=button].posts-chip-action:hover { background: #4A3617; }
+
+/* ---- Week view: the calendar is the whole page, wider than the content column. */
+.dash-main > .posts-page { display: flex; flex-direction: column; min-height: calc(100dvh - var(--dash-navbar-height)); padding-inline: var(--dash-gutter); padding-block: 24px; gap: 16px; }
+/* The week fills the height left under the header; a busy day grows past it and the page scrolls. */
+.posts-week { position: relative; display: flex; flex: 1; flex-direction: column; }
+.posts-week-grid { display: grid; flex: 1; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.posts-day { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 360px; padding: 8px; border: 1px solid #FFFFFF08; border-radius: 10px; background: #121212; }
+.posts-day[data-today] { border-color: #7C3AED55; background: #151515; }
+.posts-day-head { display: flex; align-items: baseline; gap: 6px; padding-bottom: 4px; font-size: 12px; }
+.posts-day-name { color: #9A9A9A; font-weight: 500; }
+.posts-day-date { color: #666; font-weight: 600; }
+.posts-day[data-today] .posts-day-name { color: #fff; }
+.posts-day[data-today] .posts-day-date { color: #B793F5; }
+/* An empty day offers a new post when the pointer is over it; on touch screens it always shows. */
+.posts-page [data-slot=button].posts-post-here { width: 100%; height: 36px; gap: 5px; padding: 0; border: 1px dashed #FFFFFF24; border-radius: 8px; background: transparent; color: #9A9A9A; font-size: 11.5px; font-weight: 400; }
+.posts-page [data-slot=button].posts-post-here svg { width: 12px; height: 12px; }
+.posts-page [data-slot=button].posts-post-here:hover { border-color: #FFFFFF40; background: transparent; color: var(--dash-text); }
+@media (hover: hover) { .posts-day:not(:hover) .posts-post-here { visibility: hidden; } }
+
+.posts-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 7px; border: 1px solid #FFFFFF0A; border-radius: 9px; background: var(--dash-card); }
+.posts-card[data-failed] { border-color: #E9A23B66; }
+.posts-card-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; outline: none; cursor: pointer; color: inherit; font: inherit; text-align: left; height: 92px; overflow: hidden; border-radius: 6px; background: var(--dash-pill); }
+/* The whole thumbnail is a link: a faint light layer over it on hover. */
+.posts-card-thumb::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.posts-card-thumb:hover::after { background: #FFFFFF0A; }
+.posts-card-thumb .workspace-chat-cover { display: grid; place-items: center; width: 100%; height: 100%; color: var(--dash-muted); }
+.posts-card-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.posts-card-time { position: absolute; top: 5px; left: 5px; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; background: #000000B8; color: #fff; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.posts-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; }
+.posts-dot[data-tone=scheduled] { background: #B793F5; }
+.posts-dot[data-tone=failed] { background: #E9A23B; }
+.posts-card-caption { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 12px; font-weight: 500; line-height: 16px; }
+/* Every platform on one line, "[logo] Scheduled | [logo] Posted"; what does not fit the card ends in an ellipsis. */
+.posts-card-platforms { margin: 0; padding: 0; overflow: hidden; list-style: none; font-size: 11px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.posts-card-platforms li { display: inline; }
+.posts-card-platforms li + li::before { content: '|'; margin: 0 6px; color: #666; }
+.posts-card-platforms svg { display: inline-block; width: 11px; height: 11px; margin-right: 5px; vertical-align: -1.5px; color: #C4C4C4; }
+.posts-card-platforms [data-tone=posted] { color: #8FD9B3; }
+.posts-card-platforms [data-tone=muted] { color: #9A9A9A; }
+.posts-card-platforms [data-tone=failed] { color: #F2C27A; }
+.posts-card-handle { color: #9A9A9A; }
+.posts-card-reason { margin: 0; color: #F2C27A; font-size: 11px; line-height: 15px; overflow-wrap: anywhere; }
+.posts-card-actions { display: flex; gap: 5px; }
+.posts-page [data-slot=button].posts-card-action { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border-radius: 7px; background: var(--dash-pill); color: #fff; font-size: 12px; font-weight: 500; }
+.posts-page [data-slot=button].posts-card-icon { width: 28px; height: 28px; flex-shrink: 0; border-radius: 7px; background: var(--dash-pill); color: var(--dash-text-soft); }
+.posts-page [data-slot=button].posts-card-icon svg { width: 13px; height: 13px; }
+.posts-page [data-slot=button]:is(.posts-card-action, .posts-card-icon):hover { background: var(--dash-pill-hover); color: #fff; }
+.posts-reschedule[data-slot=popover-content] { display: flex; flex-direction: column; gap: 10px; width: 260px; padding: 14px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none; font-family: var(--font-inter), sans-serif; }
+.posts-reschedule label { font-size: 13px; font-weight: 500; }
+.posts-reschedule [data-slot=input]:focus-visible { outline: none; box-shadow: none; border-color: var(--input); }
+.posts-reschedule .dash-error { margin: 0; font-size: 13px; }
+.posts-reschedule-foot { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* No posts this week: the grid stays, with a note over it. */
+.posts-week-note { position: absolute; top: 120px; left: 50%; width: min(520px, calc(100% - 32px)); padding: 28px; border: 1px solid #FFFFFF12; border-radius: 16px; background: #1A1A1A; box-shadow: 0 12px 40px #00000080; transform: translateX(-50%); text-align: center; }
+.posts-week-note h2 { margin: 0 0 6px; color: var(--dash-text); font-size: 17px; font-weight: 600; }
+.posts-week-note p { margin: 0; color: #9A9A9A; font-size: 13px; line-height: 19px; }
+
+/* A phone (or a narrow window): the week becomes a list of days, with the same cards side by side within a day. */
+@media (max-width: 900px) {
+  .posts-week-grid { flex: none; grid-template-columns: minmax(0, 1fr); }
+  .posts-day { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-items: start; min-height: 0; }
+  .posts-day-head, .posts-post-here { grid-column: 1 / -1; }
+  .posts-week-note { position: static; width: auto; margin-top: 12px; transform: none; }
+  .posts-week { display: flex; flex-direction: column-reverse; }
+  .posts-week-nav { padding-left: 0; }
+  .posts-head-row h1 { flex-basis: 100%; }
 }
+@media (max-width: 900px) and (hover: hover) { .posts-day:not(:hover) .posts-post-here { visibility: visible; } }
 
 /* ---- Post dialog. It carries its own shadcn colour mapping: the editor is not under `dash-theme`. */
 .post-dialog[data-slot=dialog-content] {

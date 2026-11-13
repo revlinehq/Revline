@@ -322,6 +322,11 @@ export async function reschedulePostFor(ctx: MutationCtx, ownerId: string, postI
   scheduleTime(scheduledAt, now);
   await ctx.db.patch(postId, { scheduledAt, dueAt: scheduledAt, updatedAt: now });
 }
+/** Move a post that has not been sent to another time: Reschedule on the Posts page calendar. */
+export const reschedule = mutation({
+  args: { postId: v.id('postingPosts'), scheduledAt: v.number() }, returns: v.null(),
+  handler: async (ctx, { postId, scheduledAt }) => { await reschedulePostFor(ctx, await requireOwner(ctx), postId, scheduledAt); return null; },
+});
 /** A time a post can be scheduled for: after now and within the horizon. */
 export function scheduleTime(scheduledAt: number, now: number) {
   if (!Number.isFinite(scheduledAt) || scheduledAt <= now) throw new ConvexError('Pick a time in the future.');
@@ -397,7 +402,7 @@ const POSTS_WINDOW = 200;
  */
 export const clipPosts = query({
   args: {},
-  returns: v.array(v.object({ batchId: v.id('postingBatches'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), byAssistant: v.boolean(), posts: v.array(clipPost) })),
+  returns: v.array(v.object({ batchId: v.id('postingBatches'), projectId: v.id('projects'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), byAssistant: v.boolean(), posts: v.array(clipPost) })),
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
     // One indexed read, as `posts` does; a clip's posts are created together, so they sit next to each other in it.
@@ -424,7 +429,7 @@ export const clipPosts = query({
         });
       }
       const { coverUrl, coverKind } = covers.get(batch.projectId)!;
-      clips.push({ batchId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, byAssistant: batch.createdBy === 'assistant', posts });
+      clips.push({ batchId, projectId: batch.projectId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, byAssistant: batch.createdBy === 'assistant', posts });
     }
     return clips;
   },

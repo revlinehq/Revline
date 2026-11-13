@@ -252,7 +252,7 @@ const FAILED_SHOWN_MS = 24 * 3600_000;
 export const exporting = query({
   args: {},
   returns: v.array(v.object({
-    id: v.id('postingPending'), label: v.string(), caption: v.string(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal('video'), v.literal('image'), v.null()),
+    id: v.id('postingPending'), projectId: v.id('projects'), label: v.string(), caption: v.string(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal('video'), v.literal('image'), v.null()),
     status: v.union(v.literal('exporting'), v.literal('failed')), error: v.union(v.string(), v.null()), progress: v.number(),
     scheduledAt: v.union(v.number(), v.null()), createdAt: v.number(), byAssistant: v.boolean(),
     accounts: v.array(v.object({ id: v.id('postingAccounts'), platform: postingPlatform, username: v.string(), avatarUrl: v.union(v.string(), v.null()) })),
@@ -272,7 +272,7 @@ export const exporting = query({
         if (account) accounts.push({ id: account._id, platform: account.platform, username: account.username, avatarUrl: await accountPicture(ctx, account) });
       }
       clips.push({
-        id: row._id, label: `${title ?? project?.title ?? 'Video'}${tabs.length > 1 && tab ? ` · ${tab.name}` : ''}`, caption: row.caption, coverUrl, coverKind,
+        id: row._id, projectId: row.projectId, label: `${title ?? project?.title ?? 'Video'}${tabs.length > 1 && tab ? ` · ${tab.name}` : ''}`, caption: row.caption, coverUrl, coverKind,
         status: row.status === 'failed' ? 'failed' as const : 'exporting' as const, error: row.error ?? null, progress: job?.status === 'rendering' ? job.progress ?? 0 : 0,
         scheduledAt: row.scheduledAt ?? null, createdAt: row.createdAt, byAssistant: row.createdBy === 'assistant', accounts,
       });

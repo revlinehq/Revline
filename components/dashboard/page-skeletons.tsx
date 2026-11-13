@@ -4,7 +4,7 @@
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AccountsSkeleton } from '@/components/posting/accounts-page';
-import { PostsSkeleton } from '@/components/posting/posts-page';
+import { PostsHeaderSkeleton, PostsWeekSkeleton } from '@/components/posting/posts-calendar';
 import { StatsRowsSkeleton } from '@/components/stats/stats-page';
 import { ChatRowsSkeleton } from '@/components/workspace/chat-history';
 import { SettingsSkeleton } from '@/components/workspace/profile-page';
@@ -24,7 +24,7 @@ export function StatsPageSkeleton() {
 }
 
 export function PostsPageSkeleton() {
-  return <main className="dash-content posts-page"><PostsSkeleton /></main>;
+  return <main className="dash-content posts-page"><PostsHeaderSkeleton /><PostsWeekSkeleton /></main>;
 }
 
 export function AccountsPageSkeleton() {
