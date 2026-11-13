@@ -52,11 +52,10 @@ function latestPublicationReceipt(receipts: readonly TimelinePublicationReceipt[
 export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;turnState?:ChatMessage['turnState'];turnError?:string;turnErrorCode?:RunFailureCode;turnResuming?:boolean;turnModel?:string;turnEffort?:string;parts:readonly unknown[]}):ChatMessage {
   const publicationReceipt=latestPublicationReceipt(message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}));
   // Text and tool calls in the order the model produced them; adjacent tool calls form one group.
-  const blocks:ChatBlock[]=[];
+  const blocks:ChatBlock[]=[],guards=new Set<ChatTool>();
   for(const part of message.parts){
     const step=chatToolFromPart(part),last=blocks.at(-1);
-    // A step-order guard (lib/ai/tool-guards) is the agent's own order of work, not a failed step: it is not shown.
-    if(step?.state==='error'&&isStepOrderGuard(stepError(part)))continue;
+    if(step?.state==='error'&&isStepOrderGuard(stepError(part)))guards.add(step);
     if(step){if(last?.type==='tools')last.steps.push(step);else blocks.push({type:'tools',steps:[step]});continue;}
     // Claude's summarized thinking, kept in order so the chat can fold it into a Thinking row.
     if(record(part)?.type==='reasoning'){const thought=String(record(part)?.text??'').trim();if(thought){if(last?.type==='thinking')last.text+=`\n\n${thought}`;else blocks.push({type:'thinking',text:thought});}continue;}
@@ -64,6 +63,12 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
     if(!text.trim())continue;
     if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
   }
+  // A step-order guard (lib/ai/tool-guards) the agent then satisfied is its own order of work, not a failed step: once a
+  // later call of the same tool succeeds, the refusal is left out. One never followed by a success stays a failure.
+  const steps=blocks.flatMap(block=>block.type==='tools'?block.steps:[]);
+  const satisfied=(guard:ChatTool)=>steps.slice(steps.indexOf(guard)+1).some(step=>step.name===guard.name&&step.state==='done');
+  for(const block of blocks)if(block.type==='tools')block.steps=block.steps.filter(step=>!guards.has(step)||!satisfied(step));
+  for(let index=blocks.length-1;index>=0;index--){const block=blocks[index];if(block.type==='tools'&&!block.steps.length)blocks.splice(index,1);}
   return {turnModel:message.turnModel,turnEffort:message.turnEffort,turnError:message.turnError,turnErrorCode:message.turnErrorCode,turnResuming:message.turnResuming,turnState:message.turnState,id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 

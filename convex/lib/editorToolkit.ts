@@ -396,12 +396,23 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { timeline: current.project.timeline ?? { clips: [], fps: 60, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
   };
   // A run picked up after an interruption must not edit a timeline it read before the interrupted write landed. The
-  // first edit re-reads the saved timeline itself (the same read as inspectTimeline) instead of refusing and asking the
-  // model for a round trip; a staged draft that no longer matches the saved revision still fails as a conflict.
-  let refreshing: Promise<void> | undefined;
+  // first edit re-reads the saved timeline itself (the same read as inspectTimeline). When it is what this request
+  // already saw, the edit goes ahead with no round trip. Only when it moved is the model asked to read it again first:
+  // its targets (clip ids, timeline seconds) and every value a tool derived from the old timeline may be stale.
+  // A staged draft that no longer matches the saved revision still fails as a conflict.
+  let refreshing: Promise<void> | undefined, timelineMoved: Error | undefined;
   const refreshAfterRecovery = () => {
     if (!inspectFirst || inspected) return Promise.resolve();
-    const read = refreshing ??= editSession.inspect(readSavedTimeline).then(() => { inspected = true; });
+    if (timelineMoved) return Promise.reject(timelineMoved);
+    const read = refreshing ??= (async () => {
+      let seen = { revision: editSession.revision, timeline: '' };
+      const current = await editSession.inspect(() => { seen = { revision: editSession.revision, timeline: JSON.stringify(editSession.timeline) }; return readSavedTimeline(); });
+      if (current.revision !== seen.revision || JSON.stringify(current.timeline) !== seen.timeline) {
+        timelineMoved = stepOrderGuard(`The saved timeline changed while this request was interrupted (revision ${seen.revision} → ${current.revision}). Read it with inspectTimeline, then repeat this call against its current clips.`);
+        throw timelineMoved;
+      }
+      inspected = true;
+    })();
     read.catch(() => { if (refreshing === read) refreshing = undefined; });
     return read;
   };

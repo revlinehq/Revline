@@ -10,7 +10,11 @@ export function stepOrderGuard(message: string) {
 // Runs saved before the editing tools re-read the timeline themselves refused every edit with this sentence.
 const LEGACY_INSPECT_GUARD = 'Inspect the current timeline before continuing the saved edit';
 
-/** Whether a stored tool error is a step-order guard; the tag may sit behind a transport prefix. */
+/** Whether a stored tool error is a step-order guard. The guard opens the message, possibly behind a transport
+ * prefix ("Error: …", "Tool x failed: …"); an error that only quotes one inside a longer failure is a real failure. */
+const GUARD_OPENINGS = ['Do this first:', LEGACY_INSPECT_GUARD];
 export function isStepOrderGuard(text: string | undefined) {
-  return !!text && (text.includes(STEP_ORDER_TAG) || text.includes(LEGACY_INSPECT_GUARD));
+  if (!text) return false;
+  const message = text.trim(), prefix = /^[^:\n]{1,60}:\s*/.exec(message)?.[0].length ?? 0;
+  return GUARD_OPENINGS.some(opening => message.startsWith(opening) || message.startsWith(opening, prefix));
 }
