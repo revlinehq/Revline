@@ -35,4 +35,10 @@ The pinned commit must be one production already ran (the promotion ledger or th
 
 Keep `distributedExports: false` on Hobby. Temporary distributed chunks still run a pinned `exportsImage` from the private GHCR registry with the environment's registry credentials (`RAILWAY_REGISTRY_USERNAME`/`RAILWAY_REGISTRY_PASSWORD`), so enabling them needs that pin kept current. They also require immutable private image support, scoped artifact credentials, and evidence proving chunk completion and assembly. Enabling distributed exports must preserve source, artifact, and environment isolation.
 
+A distributed export that fails (a chunk service that cannot start, a chunk that fails twice, a failed join) renders on the coordinating machine instead of failing the export.
+
+Joins, verified 2026-11-13 on a 60 s 1080x1920 30 fps captioned reel with seams inside captions, a crossfade, a wipe, a shake and a punch zoom, against a single-machine export of the same composition: the same 1800 frames and 60.000 s, an IDR keyframe at each seam (HyperFrames locks the GOP to the chunk with a closed GOP and joins by stream copy), every chunked frame closest to the same single-pass frame, SSIM ≥ 0.99 outside the single-pass glitch below, and bit-identical audio (one track mixed at plan time, not per chunk). The single-machine render dropped the outgoing clip for two frames at a cut inside a transition; the chunked render did not.
+
+Before turning it on: each chunk creates and deletes a Railway service, and Railway caps new services per account at about 25 a day on every plan, so with 3 extra chunks per export it stops after about 8 exports a day. Chunks run the pinned `exportsImage`, which nothing rebuilds now that slots deploy from `main`. The plan for a 60 s reel was 335 MB, uploaded once and downloaded by each chunk.
+
 Temporary chunk services have a separate bounded CPU/RAM profile. Artifacts use an attempt-specific prefix; cleanup validates both that prefix and object age before deletion. Permanent service resource settings are never overwritten by chunk defaults.
