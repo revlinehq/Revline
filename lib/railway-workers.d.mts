@@ -1,5 +1,5 @@
 export type RailwayConfig = {
-  environment: 'dev' | 'staging' | 'production'; projectId: string; environmentId: string; convexUrl: string;
+  environment: 'dev' | 'production'; projectId: string; environmentId: string; convexUrl: string;
   region: 'us-east4-eqdc4a' | 'us-west2' | 'europe-west4-drams3a' | 'asia-southeast1-eqsg3a';
   processorImage?: string; exportsImage?: string; processorCommit?: string; exportsCommit?: string;
   processorServices: string[]; standardServices: string[]; ultraServices: string[]; distributedExports: boolean;

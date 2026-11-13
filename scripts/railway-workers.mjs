@@ -3,8 +3,7 @@
 // thing: rolling a lane back to a pinned registry image (docs/releases.md, Rollback). `stage-repository` and `verify`
 // ran preflights on permanent slots and are retired: a preflight deployment left on a slot was what a later start
 // redeployed, and it exited at once instead of serving.
-import { readFile, writeFile, appendFile, mkdir, rm } from 'node:fs/promises';
-import { hostname, userInfo } from 'node:os';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
@@ -15,7 +14,7 @@ import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
 import { workerCapacity, alwaysOnProcessors } from '../lib/worker-capacity.mjs';
 import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
-import { verifyStagingPromotion, founderBypassReason, recordProductionStage } from './railway-promotion.mjs';
+import { verifyProductionHistory, recordProductionStage } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, railwaySlotSource, verifyRegistryPull, railwayWarmSlots, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
@@ -23,24 +22,16 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
   apply: { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
   processors: { type: 'string' }, standard: { type: 'string' }, ultra: { type: 'string' },
-  'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' }, 'founder-bypass': { type: 'string' },
+  'artifact-prefix': { type: 'string' },
 } });
 const [operation] = positionals;
 const operations = ['plan', 'check', 'build', 'preflight', 'stage-repository', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
-if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'staging', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|staging|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--founder-bypass "<reason>" (production stage only)] [--apply]`);
+if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--apply]`);
 if (values['image-first'] && (operation !== 'stage' || values.kind !== 'processor')) throw new Error('--image-first is only for staging a processor before its immediately following Convex release.');
-// A founder-approved exception to the staging receipt, for one production `stage` run. It is never implied:
-// the reason is required, it cannot be combined with a receipt, and the run is logged before anything changes.
-let founderBypass;
-if (values['founder-bypass'] !== undefined) {
-  if (operation !== 'stage' || values.environment !== 'production') throw new Error('--founder-bypass applies only to `stage --environment production`.');
-  founderBypass = founderBypassReason(values['founder-bypass']);
-  if (values['staging-receipt']) throw new Error('Pass a staging receipt or --founder-bypass, not both.');
-}
 const configPath = resolve(values.config);
 let config = railwayConfig(await readFile(configPath, 'utf8'));
 if (config.environment !== values.environment) throw new Error('Explicit environment and manifest differ.');
-const deployment = { dev: 'majestic-alpaca-541', staging: 'striped-starling-234', production: 'different-gnu-398' }[config.environment];
+const deployment = { dev: 'majestic-alpaca-541', production: 'different-gnu-398' }[config.environment];
 const kinds = values.kind === 'all' ? ['processor', 'exports'] : [values.kind];
 if (['stage-repository', 'verify'].includes(operation)) throw new Error(`${operation} is retired: permanent slots deploy from GitHub main. See docs/releases.md (Railway).`);
 // A pinned-image operation needs the pins of every kind it touches.
@@ -56,32 +47,19 @@ if (operation === 'plan' || (!values.apply && !['status', 'check'].includes(oper
   process.exit(0);
 }
 // Railway-only image builds and temporary runtime preflights may use the exact
-// published PR head. The dedicated isolated staging target may also exercise
-// its queue; shared DEV and production queue changes still require main.
+// published PR head; shared DEV and production queue changes require main.
 if (values.apply) {
   const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
   const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
   const railwayOnly = ['build', 'preflight'].includes(operation);
-  const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
-  if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
+  if (railwayOnly && !mainPush && branch !== 'main') {
     const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '--repo', REPOSITORY, '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    if (pr.state !== 'OPEN' || pr.headRefName !== branch || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR head.');
-  } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
+    if (pr.state !== 'OPEN' || pr.headRefName !== branch || pr.headRefOid !== head) throw new Error('A pre-merge build or preflight requires the exact published open PR head.');
+  } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
-if (founderBypass) {
-  const gitValue = name => { try { return execFileSync('git', ['config', name], { encoding: 'utf8' }).trim(); } catch { return ''; } };
-  const entry = { at: new Date().toISOString(), osUser: userInfo().username, host: hostname(), gitName: gitValue('user.name'), gitEmail: gitValue('user.email'), reason: founderBypass,
-    environment: config.environment, operation, kinds, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), processorCommit: config.processorCommit, exportsCommit: config.exportsCommit, manifestHash: hash() };
-  const log = resolve('.data/railway/founder-bypass.log');
-  // No log, no bypass: a failure here throws before any Railway or Convex call.
-  await mkdir(resolve('.data/railway'), { recursive: true });
-  await appendFile(log, JSON.stringify(entry) + '\n', { mode: 0o600 });
-  console.log(`\n*** FOUNDER BYPASS: staging promotion receipt NOT checked for this production stage. Reason: ${founderBypass}. Logged to ${log}. ***\n`);
-} else if (config.environment === 'production' && ['stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds, recorded: true });
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
 const env = { ...process.env, ...settings };
 mask(env);
@@ -117,7 +95,7 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (operation === 'preflight') {
   await verifyRailwayTarget(target());
   for (const kind of kinds) await preflight(kind);
-  console.log('Railway-only runtime preflight complete. No Convex access, queue credentials, staging receipt or routing changes.');
+  console.log('Railway-only runtime preflight complete. No Convex access, queue credentials or routing changes.');
   process.exit(0);
 }
 if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
@@ -125,9 +103,11 @@ if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deploymen
 const convex = (args, input) => command(process.execPath, ['node_modules/convex/bin/main.js', ...args, ...(env.CONVEX_DEPLOY_KEY ? [] : ['--deployment', deployment])], { env, input, quiet: true });
 const remote = parseEnv(await convex(['env', 'list']));
 mask(remote);
-if (config.environment === 'staging' && remote.REVLINE_ISOLATED !== 'true') throw new Error('Staging queue operations require the dedicated isolated backend.');
 // Recovery must still be able to restore Convex routes during a Railway outage.
 if (!['rollback', 'pause'].includes(operation)) await verifyRailwayTarget(target());
+// A production stage is a rollback to a build production already ran (scripts/railway-promotion.mjs); cutover and
+// resume put the same pins in front of the queue, so they are held to the same rule.
+if (config.environment === 'production' && ['stage', 'cutover', 'resume'].includes(operation)) await verifyProductionHistory({ config, kinds, token });
 const setEnv = (name, value) => convex(['env', 'set', name], value);
 /** RAILWAY_WORKERS_JSON as the deployment holds it now (not the copy read at startup). */
 const liveManifest = async () => { const live = parseEnv(await convex(['env', 'list'])); mask(live); return live.RAILWAY_WORKERS_JSON; };
@@ -175,7 +155,7 @@ async function waitStopped(limitMs = 50 * 60_000, pools = selectedPools()) {
 
 async function preflight(kind, existingServiceId) {
   const image = kind === 'processor' ? config.processorImage : config.exportsImage;
-  const serviceId = existingServiceId || await createRailwayService({ ...target(), name: `preflight-${{ production: 'p', staging: 's', dev: 'd' }[config.environment]}-${Date.now()}-${randomUUID().slice(0, 6)}` });
+  const serviceId = existingServiceId || await createRailwayService({ ...target(), name: `preflight-${{ production: 'p', dev: 'd' }[config.environment]}-${Date.now()}-${randomUUID().slice(0, 6)}` });
   try {
     // A permanent slot is checked with the source it already has; a temporary service always runs the image.
     const source = existingServiceId && railwaySlotSource(await railwayInstance({ ...target(), serviceId })) === 'image' ? 'image' : undefined;
@@ -232,7 +212,7 @@ if (operation === 'status') {
 } else if (operation === 'stage' || operation === 'check') {
   // ---- 1. Every check, before any claim pause or slot change ----
   // Anything a release can be missing (a key, the project token, registry access, an image) fails here, while
-  // production still runs and claims. `check` stops after this block; release:prod runs it before the staging proof.
+  // production still runs and claims. `check` stops after this block.
   const artifactVariables = {};
   const maxChunks = z.coerce.number().int().min(2).max(16).parse(settings.REVLINE_EXPORT_MAX_CHUNKS ?? 8);
   if (kinds.includes('exports') && config.distributedExports) {
