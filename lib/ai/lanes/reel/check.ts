@@ -10,7 +10,7 @@ export function check(_context: LaneCheckContext): string[] {
 }
 
 /** A retained spoken word on the timeline. `heldEnd` is the provider's unshortened end, which may run on through trailing silence. */
-export type SpokenWord = { text: string; start: number; end: number; heldEnd?: number; /** The source word: asset and transcript index. */ word?: string };
+export type SpokenWord = { text: string; start: number; end: number; heldEnd?: number; /** The source word: asset and transcript index. */ word?: string; /** Where the whole word plays, before a cut clamps it to its piece: for following edits. */ raw?: { start: number; end: number } };
 
 /** Retained words as addSubtitlesFromTranscript captions them: the same timing copy (provider words whose ends are
  * pulled back to measured quiet) and the same rule for which piece a word at a cut belongs to. Measuring captions
@@ -31,7 +31,7 @@ export function retainedSpeechWords(timeline: Timeline, assets: { _id: string; k
       // A word reaching past the cut is shown only while its clip plays.
       const start = Math.max(word.start, clip.sourceStart), end = Math.max(start, Math.min(word.end, sourceEnd));
       const held = aligned ? Math.min(provider.words[index].end, sourceEnd) : end;
-      return [{ text: word.text, start: timelineTimeAtSource(clip, start), end: timelineTimeAtSource(clip, end), ...(held > end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}), word: `${owner!._id}:${index}` }];
+      return [{ text: word.text, start: timelineTimeAtSource(clip, start), end: timelineTimeAtSource(clip, end), ...(held > end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}), word: `${owner!._id}:${index}`, raw: { start: clip.start + (word.start - clip.sourceStart) / (clip.playbackRate ?? 1), end: clip.start + (word.end - clip.sourceStart) / (clip.playbackRate ?? 1) } }];
     });
   });
   return [...new Map(speech.map(word => [`${word.start.toFixed(3)}:${word.end.toFixed(3)}:${word.text}`, word])).values()]
@@ -182,13 +182,15 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
       }
       if (!run.length || run.some(word => !word.word || count.get(word.word) !== 1)) { withFootage(old); continue; }
       const first = at.get(run[0].word!)!, last = at.get(run.at(-1)!.word!)!;
-      if (Math.abs(first.start - run[0].start) < frame / 2) continue;
+      if (Math.abs((first.raw?.start ?? first.start) - (run[0].raw?.start ?? run[0].start)) < frame / 2) continue;
       moves.push({ id: caption.id, start: first.start, end: Math.max(first.start + frame, last.end), delta: first.start - old.start });
       continue;
     }
     if (inside.some(word => !word.word || count.get(word.word) !== 1)) { withFootage(old); continue; }
     const first = at.get(inside[0].word!)!, last = at.get(inside.at(-1)!.word!)!;
-    const startDelta = first.start - inside[0].start, endDelta = last.end - inside.at(-1)!.end;
+    // Whole-word times: a split that clamps a word to its new piece moves nothing.
+    const rawStart = (word: SpokenWord) => word.raw?.start ?? word.start, rawEnd = (word: SpokenWord) => word.raw?.end ?? word.end;
+    const startDelta = rawStart(first) - rawStart(inside[0]), endDelta = rawEnd(last) - rawEnd(inside.at(-1)!);
     if (Math.abs(startDelta) < frame / 2 && Math.abs(endDelta) < frame / 2) continue;
     moves.push({ id: caption.id, start: Math.max(0, old.start + startDelta), end: Math.max(0, end + endDelta), delta: startDelta });
   }
