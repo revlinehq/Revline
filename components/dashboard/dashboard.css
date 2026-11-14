@@ -31,6 +31,12 @@
 :is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-group { padding-top: 8px; }
 :is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-row[data-slot=sidebar-menu-button] { width: 36px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
 :is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-row span { display: none; }
+/* The footer under the nav groups holds Support, which opens Discord in a new tab: an outline lifebuoy, and a small arrow at the row's end that the icon-only sidebar hides. */
+.dash-sidebar-footer { padding: 12px; border-top: 1px solid var(--dash-divider); }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-sidebar-footer { padding: 12px 10px; }
+.dash-nav-row[data-slot=sidebar-menu-button] svg.lucide-life-buoy { fill: none; stroke-width: 2.25; }
+.dash-nav-row[data-slot=sidebar-menu-button] svg.dash-nav-external { width: 14px; height: 14px; margin-left: auto; fill: none; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-row .dash-nav-external { display: none; }
 [data-sidebar-collapsed] .dash-shell :is([data-slot=sidebar-gap], [data-slot=sidebar-container]) { width: var(--sidebar-width-icon); }
 
 /* Phone: the sidebar is a sheet opened from the navbar; it appears without motion. */

@@ -5,7 +5,9 @@ import Link, { useLinkStatus } from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { PrefetchKind } from 'next/dist/client/components/router-reducer/router-reducer-types';
 import { useUser } from '@clerk/nextjs';
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { ArrowUpRight, LifeBuoy } from 'lucide-react';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { DISCORD_URL } from '@/components/workspace/discord-link';
 import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
 import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH, sidebarCookieCollapsed } from '@/lib/workspace-routes';
 import { DashboardShellContext } from './shell-context';
@@ -43,6 +45,14 @@ function NavRow({ item, active, onPending }: { item: DashboardNavItem; active: b
   </SidebarMenuButton></SidebarMenuItem>;
 }
 
+/** Pinned to the sidebar's foot, apart from the nav groups: Support opens the community Discord in a new tab. */
+function SupportRow() {
+  const { setOpenMobile } = useSidebar();
+  return <SidebarMenu className="dash-nav-list"><SidebarMenuItem><SidebarMenuButton asChild tooltip="Support" className="dash-nav-row">
+    <a href={DISCORD_URL} target="_blank" rel="noreferrer" onClick={() => setOpenMobile(false)}><LifeBuoy aria-hidden="true" /><span>Support</span><ArrowUpRight aria-hidden="true" className="dash-nav-external" /></a>
+  </SidebarMenuButton></SidebarMenuItem></SidebarMenu>;
+}
+
 export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -68,6 +78,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <SidebarMenu className="dash-nav-list">{group.items.map(item => <NavRow key={item.href} item={item} active={item === active} onPending={onPending} />)}</SidebarMenu>
           </SidebarGroup>)}
         </SidebarContent>
+        <SidebarFooter className="dash-sidebar-footer"><SupportRow /></SidebarFooter>
       </Sidebar>
       <SidebarInset className="dash-main">
         {dashboardShowsNavbar(pathname) && <DashboardNavbar />}

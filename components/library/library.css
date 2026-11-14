@@ -33,6 +33,8 @@
 .account-menu-item[data-slot=button] { justify-content: flex-start; gap: 8px; height: 34px; padding: 0 10px; border-top: 1px solid var(--dash-divider); border-radius: 8px; font-size: 14px; font-weight: 400; transition: none; }
 .account-menu-item[data-slot=button]:hover { background: var(--dash-pill); }
 .account-menu-item svg { width: 16px; height: 16px; color: var(--dash-muted); }
+.account-menu-item + .account-menu-item[data-slot=button] { border-top: 0; }
+.account-menu-item svg.account-menu-external { width: 14px; height: 14px; margin-left: auto; }
 .storage-meter { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0 0 6px; }
 .storage-meter[aria-busy] { padding: 8px 10px 12px; }
 .storage-meter .storage-meter-toggle { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: 100%; height: auto; padding: 8px 10px 10px; border-radius: 8px; color: var(--dash-text); font-weight: 400; transition: none; }
