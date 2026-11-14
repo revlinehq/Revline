@@ -1,0 +1,1 @@
+- Releases: `release:prod` and `release:status` check that GitHub main reaches every Railway slot (GitHub app, trigger repository and branch, Wait for CI, watch paths) and fail the release run naming the broken setting. Why: Railway received no push since the repository moved to revlinehq, so slots were built by hand after every merge.

@@ -12,7 +12,7 @@ There is no staging environment; production protects itself (`docs/releases.md`,
 
 ## Permanent services
 
-Each pool contains explicit service IDs. Every service deploys from GitHub `revlinehq/Revline` branch `main` with Railway's automatic deploys (Dockerfile `media-processor/Dockerfile`, target from `REVLINE_FINAL_TARGET`): Railway decides which commit runs, and the Convex dispatcher only starts a slot's newest good build (`docs/releases.md`, Railway). One replica in the selected region, `railway-entry.sh`, no public workload endpoint, and no automatic restart after a normal idle exit.
+Each pool contains explicit service IDs. Every service deploys from GitHub `revlinehq/Revline` branch `main` with Railway's automatic deploys (which need the Railway GitHub app installed on `revlinehq`, "Wait for CI" off and no watch paths; `docs/releases.md`, When main does not deploy) (Dockerfile `media-processor/Dockerfile`, target from `REVLINE_FINAL_TARGET`): Railway decides which commit runs, and the Convex dispatcher only starts a slot's newest good build (`docs/releases.md`, Railway). One replica in the selected region, `railway-entry.sh`, no public workload endpoint, and no automatic restart after a normal idle exit.
 
 CPU and memory limits are read from the dashboard. A resource change invalidates cached deployment snapshots so the next controlled start uses the current limits. Pool counts remain bounded by `MEDIA_PROCESSOR_MAX_WORKERS`, `EXPORT_MAX_WORKERS_STANDARD`, and `EXPORT_MAX_WORKERS_ULTRA`. Existing legacy capacity settings remain compatible until replaced with those names.
 
