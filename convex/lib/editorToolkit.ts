@@ -431,7 +431,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return read;
   };
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
-    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [];
+    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [], stranded: { clipId: string; text: string }[] = [];
     await refreshAfterRecovery();
     const result = await editSession.checkpoint(timeline => {
     let edited = edit(timeline);
@@ -442,7 +442,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     if (footageMoved && !RESTORING_TOOLS.some(name => runningTools.has(name))) {
       // A follow never trims or removes another caption: only an edge under a frame into a neighbour stops at it.
       const follow = followSpeechCaptions(timeline, edited, assets, (t, clipId, range) => { const retimed = updateCaptionTiming(t, clipId, range); if (retimed.neighbours.length) throw new Error('neighbour'); return retimed.timeline; });
-      edited = follow.timeline; followed = follow.followed;
+      edited = follow.timeline; followed = follow.followed; stranded = follow.stranded;
     }
     const grid = onFrameGrid(edited, timeline); healed = grid.healed;
     // The edit that opens a hole says so in its own result, not three finish checks later.
@@ -461,7 +461,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // An older media processor has no emoji font: say so with the edit instead of leaving a "NO GLYPH" box to be found in a frame.
     // Only for an edit that wrote the emoji text, so moves and trims of that caption stay quiet.
     const emoji = emojiText && !await processorCan(ctx, 'render:emoji');
-    return { ...result, ...(followed.length ? { captionsFollowed: followed.length, captionNote: `${followed.length} caption${followed.length === 1 ? '' : 's'} moved with ${followed.length === 1 ? 'its' : 'their'} spoken words.` } : {}), ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
+    return { ...result, ...(followed.length || stranded.length ? { captionsFollowed: followed.length, captionNote: [followed.length ? `${followed.length} caption${followed.length === 1 ? '' : 's'} moved with ${followed.length === 1 ? 'its' : 'their'} spoken words.` : '', stranded.length ? `Removed ${stranded.length} caption${stranded.length === 1 ? '' : 's'} left over deleted footage, in a gap this edit closed: ${stranded.map(item => JSON.stringify(item.text)).join(', ')}.` : ''].filter(Boolean).join(' ') } : {}), ...(stranded.length ? { removedCaptions: stranded } : {}), ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
   };
   const markerCheckpoint = async (edit: (timeline: Timeline) => Timeline) => {
     const result = await checkpoint(edit);
@@ -1287,7 +1287,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return joined.timeline;
       });
       const j=joined!;
-      return {...result,clipId:j.clipId,pieces:j.pieces,...(j.joined.length?{joinedInto:{[j.clipId]:j.joined}}:{}),...(j.restoredSeconds?{restoredSeconds:j.restoredSeconds}:{}),rippledBy:j.rippledBy,movedCaptions:j.movedCaptions,remainingGaps:footageGaps(editSession.timeline).length,note:`Joined into ${j.pieces.length===1?`one clip ${j.clipId}`:`${j.pieces.length} pieces butting at ${j.pieces.length-1} kept cut${j.pieces.length===2?'':'s'} (gap 'restore' brings the removed footage back)`}; its sound is in sync with the picture${j.rippledBy?`, and later clips moved ${j.rippledBy<0?'earlier':'later'} by ${Math.abs(j.rippledBy)} s`:''}.${gapsBefore?' Other gaps on the timeline are untouched: closeGaps closes them all in one call.':''}`};
+      return {...result,clipId:j.clipId,pieces:j.pieces,...(j.joined.length?{joinedInto:{[j.clipId]:j.joined}}:{}),...(j.restoredSeconds?{restoredSeconds:j.restoredSeconds}:{}),rippledBy:j.rippledBy,remainingGaps:footageGaps(editSession.timeline).length,note:`Joined into ${j.pieces.length===1?`one clip ${j.clipId}`:`${j.pieces.length} pieces butting at ${j.pieces.length-1} kept cut${j.pieces.length===2?'':'s'} (gap 'restore' brings the removed footage back)`}; its sound is in sync with the picture${j.rippledBy?`, and later clips moved ${j.rippledBy<0?'earlier':'later'} by ${Math.abs(j.rippledBy)} s`:''}.${gapsBefore?' Other gaps on the timeline are untouched: closeGaps closes them all in one call.':''}`};
     }}),
     swapClips:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.swapClips,description:"Swap two shots in ONE saved change: 'swap 16 s and 19 s' is swapClips {a:16, b:19}. a and b are clip IDs or timeline seconds (the shot showing at that time). Each slot keeps its start, duration and layer, so cut points and music sync stay; the incoming shot plays its own footage from its source start, moved earlier only when the footage would run out. Linked audio and stacked mirror-blur copies travel with their shot, and a backgroundFill is part of the clip. Refuses shots joined by a transition, speed-ramped shots, and footage shorter than the other slot.",inputSchema:z.object({a:z.union([z.string().min(1).max(100),shotTimeInput]),b:z.union([z.string().min(1).max(100),shotTimeInput]),track:shotTrackInput}).strict(),execute:async(_ctx,input)=>{
       let slots={};

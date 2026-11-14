@@ -2,6 +2,7 @@ import type { LaneCheckContext, LaneEvidence } from '../types';
 import type { Timeline } from '../../../editor/types';
 import { sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
 import { trackOf } from '../../../editor/types';
+import { footageGaps } from '../../../editor/frame-grid';
 import { captionSpeech, wordInSource, type SpeechAnalysis } from '../../../editor/transcript-captions';
 export function check(_context: LaneCheckContext): string[] {
   return [];
@@ -125,35 +126,46 @@ export function captionSyncFailures(
   return failures;
 }
 
-/** Captions follow their speech through an edit that moved footage (trim, move, join, closing gaps): each caption whose
- *  words all still play is shifted by how far its first and last word moved, through setCaptionTiming's rules, so
- *  neighbouring captions stay in order. A caption whose words were cut, or that sat over no speech, stays put. */
-export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1], retime: (timeline: Timeline, clipId: string, range: { start: number; end: number }) => Timeline): { timeline: Timeline; followed: string[] } {
-  if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [] };
+/** Captions follow their speech through an edit that moved footage (trim, move, join, closing gaps): each caption that
+ *  said the words under it, with all of them still playing, is shifted by how far its first and last word moved, through
+ *  setCaptionTiming's rules, so neighbouring captions stay in order. A caption that was already out of step with the
+ *  speech stays put (moving it would carry the drift along). A caption left over footage that was deleted, sitting over a
+ *  gap this edit closed and over none of its words now, is removed and reported: it would otherwise caption other words. */
+export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1], retime: (timeline: Timeline, clipId: string, range: { start: number; end: number }) => Timeline): { timeline: Timeline; followed: string[]; stranded: { clipId: string; text: string }[] } {
+  if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [], stranded: [] };
   const was = retainedSpeechWords(before, assets), now = retainedSpeechWords(after, assets);
-  if (!was.length || !now.length) return { timeline: after, followed: [] };
+  if (!was.length || !now.length) return { timeline: after, followed: [], stranded: [] };
+  const plain = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const frame = 1 / after.fps, within = (words: SpokenWord[], start: number, end: number) => words.filter(word => { const middle = (word.start + word.end) / 2; return middle >= start - frame && middle < end + frame; });
+  const says = (text: string, words: SpokenWord[]) => !!plain(text) && words.length > 0 && plain(words.map(word => word.text).join(' ')).includes(plain(text));
   // A word played twice (footage reused) has no single new time: it never moves a caption.
   const count = new Map<string, number>(), at = new Map<string, SpokenWord>();
   for (const word of now) if (word.word) { count.set(word.word, (count.get(word.word) ?? 0) + 1); at.set(word.word, word); }
-  const frame = 1 / after.fps, moves: { id: string; start: number; end: number; delta: number }[] = [];
+  const moves: { id: string; start: number; end: number; delta: number }[] = [], stranded: { clipId: string; text: string }[] = [];
+  const gapsBefore = footageGaps(before), gapsAfter = footageGaps(after);
+  const closedGap = (start: number, end: number) => gapsBefore.some(gap => start >= gap.start - frame && end <= gap.end + frame) && !gapsAfter.some(gap => start >= gap.start - frame && end <= gap.end + frame);
   for (const caption of after.clips) {
     if (caption.kind !== 'caption') continue;
     const old = before.clips.find(clip => clip.id === caption.id);
     // Only captions this edit did not already place.
     if (!old || Math.abs(old.start - caption.start) > 1e-6 || Math.abs(old.duration - caption.duration) > 1e-6) continue;
-    const end = old.start + old.duration, inside = was.filter(word => { const middle = (word.start + word.end) / 2; return middle >= old.start - frame && middle < end + frame; });
-    if (!inside.length || inside.some(word => !word.word || count.get(word.word) !== 1)) continue;
+    const end = old.start + old.duration, inside = within(was, old.start, end);
+    if (!inside.length) {
+      if (closedGap(old.start, end) && !says(caption.text ?? '', within(now, caption.start, caption.start + caption.duration))) stranded.push({ clipId: caption.id, text: caption.text ?? '' });
+      continue;
+    }
+    if (!says(caption.text ?? '', inside) || inside.some(word => !word.word || count.get(word.word) !== 1)) continue;
     const first = at.get(inside[0].word!)!, last = at.get(inside.at(-1)!.word!)!;
     const startDelta = first.start - inside[0].start, endDelta = last.end - inside.at(-1)!.end;
     if (Math.abs(startDelta) < frame / 2 && Math.abs(endDelta) < frame / 2) continue;
     moves.push({ id: caption.id, start: Math.max(0, old.start + startDelta), end: Math.max(0, end + endDelta), delta: startDelta });
   }
+  let timeline = stranded.length ? { ...after, clips: after.clips.filter(clip => !stranded.some(item => item.clipId === clip.id)) } : after;
   // Captions moving earlier go first from the left, later ones first from the right, so none runs into one still to move.
   moves.sort((a, b) => (a.delta < 0 ? 0 : 1) - (b.delta < 0 ? 0 : 1) || (a.delta < 0 ? a.start - b.start : b.start - a.start));
-  let timeline = after;
   const followed: string[] = [];
   for (const move of moves) {
     try { if (move.end - move.start >= frame) { timeline = retime(timeline, move.id, { start: move.start, end: move.end }); followed.push(move.id); } } catch { /* a caption that cannot follow stays; finish names it */ }
   }
-  return { timeline, followed };
+  return { timeline, followed, stranded };
 }

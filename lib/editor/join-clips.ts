@@ -75,7 +75,7 @@ export function alignSounds(input: Timeline, audioAssetOf: AudioAssetOf = () => 
 }
 
 export type JoinGap = 'keep-cut' | 'restore';
-export type JoinResult = { timeline: Timeline; clipId: string; pieces: { clipId: string; sourceStart: number; sourceEnd: number; start: number; end: number }[]; joined: string[]; restoredSeconds: number; rippledBy: number; movedCaptions: number; alignedSound: string[] };
+export type JoinResult = { timeline: Timeline; clipId: string; pieces: { clipId: string; sourceStart: number; sourceEnd: number; start: number; end: number }[]; joined: string[]; restoredSeconds: number; rippledBy: number; alignedSound: string[] };
 
 /** The two footage clips either side of the cut (or gap) at a timeline second, on `track` or the main footage layer. */
 export function clipsAtCut(input: Timeline, at: number, track?: number): [string, string] {
@@ -95,7 +95,7 @@ export function clipsAtCut(input: Timeline, at: number, track?: number): [string
  * seamless clip; source removed between them stays removed with `keep-cut` (the pieces butt together as a cut) or comes
  * back with `restore` (one clip through the removed footage). The first piece's properties win. Each piece's sound (linked,
  * or the unlinked audio of the same source under it) is joined the same way and lands in sync with the picture. Later
- * clips on the layer, their sound and the captions over moved footage ripple by the same time.
+ * clips on the layer and their sound ripple by the same time; captions follow their words in the edit's checkpoint.
  */
 export function joinClips(input: Timeline, ids: readonly string[], gap: JoinGap = 'keep-cut', audioAssetOf: AudioAssetOf = () => undefined, newId: () => string = () => crypto.randomUUID()): JoinResult {
   const timeline = normalizeTimeline(input);
@@ -146,7 +146,7 @@ export function joinClips(input: Timeline, ids: readonly string[], gap: JoinGap 
   if (transition) throw new Error(`A transition (${transition.id}) is connected to a piece this join replaces. Remove it before joining.`);
   const used = new Set(timeline.clips.filter(clip => !dropped.has(clip.id)).map(clip => clip.id));
   const freshId = () => { let id = newId(); while (!id || used.has(id)) id = newId(); used.add(id); return id; };
-  const oldPictureEnd = endOf(pieces.at(-1)!), added: Clip[] = [], placed: JoinResult['pieces'] = [], pieceShift = new Map<string, number>();
+  const oldPictureEnd = endOf(pieces.at(-1)!), added: Clip[] = [], placed: JoinResult['pieces'] = [];
   let cursor = first.start;
   runs.forEach((run, index) => {
     const duration = (run.sourceEnd - run.sourceStart) / rate;
@@ -155,7 +155,6 @@ export function joinClips(input: Timeline, ids: readonly string[], gap: JoinGap 
     used.add(base.id);
     const clip: Clip = { ...base, start: cursor, duration, sourceStart: run.sourceStart };
     delete clip.linkedClipId;
-    for (const piece of run.from) pieceShift.set(piece.id, cursor + (piece.sourceStart - run.sourceStart) / rate - piece.start);
     const template = run.sound;
     if (template) {
       const linked = !!template.linkedClipId, soundId = used.has(template.id) ? freshId() : (used.add(template.id), template.id);
@@ -180,15 +179,6 @@ export function joinClips(input: Timeline, ids: readonly string[], gap: JoinGap 
     if (sound && !drop.has(sound.id)) shiftOf.set(sound.id, rippledBy);
     for (const copy of copies) { const mirror = byId.get(copy); if (mirror && Math.abs(mirror.start - clip.start) < EPSILON && trackOf(mirror) !== trackOf(clip)) shiftOf.set(copy, rippledBy); }
   }
-  // Captions over moved footage move with it; captions after the join ripple with the later clips.
-  let movedCaptions = 0;
-  for (const caption of timeline.clips) {
-    if (caption.kind !== 'caption') continue;
-    // A caption in a gap between pieces goes with the piece after it.
-    const over = pieces.find((piece, index) => caption.start >= (index ? endOf(pieces[index - 1]) : piece.start) - EPSILON && caption.start < endOf(piece) - EPSILON);
-    const delta = over ? pieceShift.get(over.id)! : caption.start >= oldPictureEnd - EPSILON ? rippledBy : undefined;
-    if (delta !== undefined && Math.abs(delta) > EPSILON) { shiftOf.set(caption.id, delta); movedCaptions++; }
-  }
   // The replaced pieces leave; the joined clips and their sound take the first piece's place in clip order.
   const at = timeline.clips.findIndex(clip => clip.id === first.id);
   const clips = timeline.clips.flatMap((clip, index) => {
@@ -198,5 +188,5 @@ export function joinClips(input: Timeline, ids: readonly string[], gap: JoinGap 
     return delta === undefined ? [clip] : [{ ...clip, start: Math.max(0, clip.start + delta) }];
   });
   const next = reconcileTransitionEdits(timeline, { ...timeline, clips });
-  return { timeline: { ...next, tracks: deriveTrackCounts(next) }, clipId: first.id, pieces: placed, joined: pieces.filter(piece => !placed.some(item => item.clipId === piece.id)).map(piece => piece.id), restoredSeconds: round(restored), rippledBy: round(rippledBy), movedCaptions, alignedSound: sounds.flatMap(sound => sound ? [sound.id] : []) };
+  return { timeline: { ...next, tracks: deriveTrackCounts(next) }, clipId: first.id, pieces: placed, joined: pieces.filter(piece => !placed.some(item => item.clipId === piece.id)).map(piece => piece.id), restoredSeconds: round(restored), rippledBy: round(rippledBy), alignedSound: sounds.flatMap(sound => sound ? [sound.id] : []) };
 }
