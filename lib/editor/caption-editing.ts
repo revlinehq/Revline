@@ -73,16 +73,29 @@ function wordsInside(inner:string,outer:string){
   const words=captionWords(inner);
   return words.length>0&&words.every(word=>{const left=pool.get(word)??0;if(!left)return false;pool.set(word,left-1);return true;});
 }
-/** Edit a caption's absolute range on project frames, preserving its original animation phase. Neighbouring captions on
+/** Edit a caption's absolute range on project frames, preserving its original animation phase. An edge reaching less than
+ *  a frame (or 40 ms) into a neighbouring caption stops at that caption (`snapped`). Otherwise neighbouring captions on
  *  its track make room: an overlapped edge is trimmed (a moved start keeps its animation phase), and a neighbour left with
  *  less than a frame, or covered, is removed only when all its words are in this caption's text. A neighbour that would
  *  lose words, or another kind of clip on the track, is never changed: the call is refused naming it. */
-export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):{timeline:Timeline;neighbours:CaptionNeighbourChange[]}{
+export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):{timeline:Timeline;neighbours:CaptionNeighbourChange[];snapped?:{start?:number;end?:number}}{
   timeline=normalizeTimeline(timeline);const clip=caption(timeline,clipId);
   if(changes.start===undefined&&changes.end===undefined)throw new Error('Specify a caption start or end.');
   const requestedStart=changes.start??clip.start,requestedEnd=changes.end??clip.start+clip.duration;
   if(![requestedStart,requestedEnd].every(Number.isFinite)||requestedStart<0||requestedEnd<0)throw new Error('Caption times must be finite and nonnegative.');
-  const frame=1/timeline.fps,start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps,duration=end-start;
+  const frame=1/timeline.fps;
+  let start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps;
+  if(end-start<frame-1e-7)throw new Error('A caption must last at least one frame.');
+  // A caption edge that runs a sliver (under a frame, or 40 ms) into a neighbouring caption stops at it: the end meets the
+  // next caption's start and the start meets the previous one's end, so a rounded time never refuses or trims a neighbour.
+  const sliver=Math.max(frame,.04)+1e-7,snapped:{start?:number;end?:number}={};
+  for(const other of timeline.clips){
+    if(other.id===clip.id||other.kind!=='caption'||trackOf(other)!==trackOf(clip))continue;
+    const otherEnd=other.start+other.duration;
+    if(other.start>start&&other.start<end-1e-7&&end-other.start<=sliver&&otherEnd>end){end=other.start;snapped.end=Math.round(end*1000)/1000;}
+    else if(otherEnd<end&&otherEnd>start+1e-7&&otherEnd-start<=sliver&&other.start<start){start=otherEnd;snapped.start=Math.round(start*1000)/1000;}
+  }
+  const duration=end-start;
   if(duration<frame-1e-7)throw new Error('A caption must last at least one frame.');
   const overlapping=timeline.clips.filter(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7);
   const name=(other:Clip)=>`${other.kind==='caption'?'Caption':'Clip'} ${other.id}${other.text?` ${JSON.stringify(other.text.slice(0,60))}`:''} (${other.start.toFixed(2)}–${(other.start+other.duration).toFixed(2)} s)`;
@@ -112,7 +125,7 @@ export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{sta
     }
   }
   const next={...clip,...offsetClipMotion(clip,start-clip.start),start,duration};validateClipEffects(next);
-  return {timeline:{...timeline,clips:timeline.clips.flatMap(item=>item.id===clipId?[next]:replaced.has(item.id)?(replaced.get(item.id)?[replaced.get(item.id)!]:[]):[item])},neighbours};
+  return {timeline:{...timeline,clips:timeline.clips.flatMap(item=>item.id===clipId?[next]:replaced.has(item.id)?(replaced.get(item.id)?[replaced.get(item.id)!]:[]):[item])},neighbours,...(Object.keys(snapped).length?{snapped}:{})};
 }
 
 /** Saved speech per source asset, as `captionSpeech` returns it. */

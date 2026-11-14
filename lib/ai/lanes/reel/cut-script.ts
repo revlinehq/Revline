@@ -1,6 +1,6 @@
 import type { Timeline } from '../../../editor/types';
 import type { Transcript } from '../../../media-analysis/transcript';
-import { sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
+import { playbackRateOf, sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
 import { retakeEvidence, type SpeechCleanup } from '../../../speech-cleanup';
 import { FILLERS, STUTTER_WORDS, scriptOutline, token, wordAnchor } from './script';
 import { retakeHints } from './retakes';
@@ -148,7 +148,11 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
         continue;
       }
       const edge = has(head ? present[0] : present.at(-1)!)!;
-      flags.push({ id: `mid-sentence:${asset._id.slice(-6)}:${seconds(line.start)}`, kind: 'mid-sentence', at: head ? edge.start : edge.end, end: head ? edge.start : edge.end, clipId: edge.clipId, atCut: true, detail: head ? `the cut starts mid-sentence at ${quote(present.slice(0, 5).map(word => word.text).join(' '))}, without the start of ${quote(line.text)}` : `${quote(line.text)} stops mid-sentence after ${quote(present.slice(-4).map(word => word.text).join(' '))}`, fix: head ? `Keep the line from source ${seconds(needed[0].start)} s, or drop the rest of it through source ${seconds(line.end)} s.` : `Keep the line through source ${seconds(needed.at(-1)!.end)} s, or drop it from source ${seconds(line.start)} s.` });
+      // The one call that keeps the rest of the line: that edge of the clip, extended in timeline seconds through its speed.
+      const edgeClip = timeline.clips.find(clip => clip.id === edge.clipId), target = head ? needed[0].start : needed.at(-1)!.end;
+      const delta = edgeClip ? Math.round((head ? target - edgeClip.sourceStart : target - sourceEndOf(edgeClip)) / playbackRateOf(edgeClip) * 1000) / 1000 : 0;
+      const extend = edgeClip && (head ? delta < 0 : delta > 0) ? ` In one call: resizeClips ${JSON.stringify({ clipIds: [edgeClip.kind === 'audio' && edgeClip.linkedClipId ? edgeClip.linkedClipId : edgeClip.id], side: head ? 'left' : 'right', delta, ripple: true })} (linked audio follows; later clips move with it).` : '';
+      flags.push({ id: `mid-sentence:${asset._id.slice(-6)}:${seconds(line.start)}`, kind: 'mid-sentence', at: head ? edge.start : edge.end, end: head ? edge.start : edge.end, clipId: edge.clipId, atCut: true, detail: head ? `the cut starts mid-sentence at ${quote(present.slice(0, 5).map(word => word.text).join(' '))}, without the start of ${quote(line.text)}` : `${quote(line.text)} stops mid-sentence after ${quote(present.slice(-4).map(word => word.text).join(' '))}`, fix: head ? `Keep the line from source ${seconds(needed[0].start)} s, or drop the rest of it through source ${seconds(line.end)} s.${extend}` : `Keep the line through source ${seconds(needed.at(-1)!.end)} s, or drop it from source ${seconds(line.start)} s.${extend}` });
     }
     // Reworded retakes and restarts inside a sentence: hints from word overlap and shared numbers and names, so the
     // model's own reading of the prose has the likely spots marked. Spots another flag already names are left to it.

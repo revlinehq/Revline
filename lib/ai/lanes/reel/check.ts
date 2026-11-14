@@ -60,6 +60,8 @@ export async function reelFinishKey(input: {
 const seconds = (time: number) => time.toFixed(2);
 const spokenRange = (words: SpokenWord[]) => `${seconds(words[0].start)}–${seconds(words.at(-1)!.end)} s`;
 const MAX_LISTED_WORDS = 12;
+/** Spoken words as caption text: the transcript's own words and punctuation, the first letter capitalized. */
+const spokenPhrase = (words: SpokenWord[]) => words.map(word => word.text).join(' ').replace(/^\P{L}*\p{L}/u, match => match.toLocaleUpperCase());
 
 /** Match caption text and phrase edges to retained measured words, including retiming. Each failure names the caption,
  * what is spoken, and the exact range to set, so one repair step fixes it. Case and punctuation never fail a match. */
@@ -93,7 +95,7 @@ export function captionSyncFailures(
       const inside = words.filter(word => { const middle = (word.start + word.end) / 2; return middle >= caption.start - frame && middle < end + frame; });
       sink.push(!inside.length
         ? `${label} covers no retained speech. Delete it, or move it with setCaptionTiming to where its words are spoken.`
-        : `${label} does not match the words spoken there: ${JSON.stringify(inside.map(word => word.text).join(' '))} (${spokenRange(inside)}).${inside.length > 8 ? ' A caption holds at most 8 words; split it.' : ''} Use editText with that phrase (case and punctuation may differ), or setCaptionTiming to the range where its own words are spoken.`);
+        : `${label} does not match the words spoken there: ${JSON.stringify(inside.map(word => word.text).join(' '))} (${spokenRange(inside)}).${inside.length > 8 ? ' A caption holds at most 8 words; split it.' : ''} ${inside.length > 8 ? ' Use editText with that phrase (case and punctuation may differ), or setCaptionTiming to the range where its own words are spoken.' : ` To caption what is said, in one call: editText ${JSON.stringify({ clipId: caption.id, text: spokenPhrase(inside), start: Number(seconds(inside[0].start)), end: Number(seconds(inside.at(-1)!.end)) })}. Or setCaptionTiming to the range where its own words are spoken.`}`);
       return false;
     }
     const spoken = run.map(index => words[index]), last = spoken.at(-1)!, next = words[run.at(-1)! + 1];

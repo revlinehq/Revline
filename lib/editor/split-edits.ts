@@ -145,12 +145,13 @@ export function applySplitEdits(input: Timeline, request: SplitEditRequest, sour
   };
   if (request.cuts) {
     for (const cut of request.cuts) {
-      if (cut.clipId !== undefined) {
-        const clip = timeline.clips.find(item => item.id === cut.clipId);
-        // The sound clip of a shot names the same cut.
-        const video = clip?.kind === 'audio' ? timeline.clips.find(item => item.kind === 'video' && soundOf(timeline, item, sources.audioAssetOf)?.id === clip.id) : clip;
-        const join = video?.kind === 'video' ? joinsOn(timeline, trackOf(video)).find(item => item.outgoing.id === video.id) : undefined;
-        if (join) add(join, cut);
+      // With both, clipId names the cut; at is the fallback when that clip has no cut after it (a stale id, or the clip after it).
+      const clip = cut.clipId !== undefined ? timeline.clips.find(item => item.id === cut.clipId) : undefined;
+      // The sound clip of a shot names the same cut.
+      const video = clip?.kind === 'audio' ? timeline.clips.find(item => item.kind === 'video' && soundOf(timeline, item, sources.audioAssetOf)?.id === clip.id) : clip;
+      const named = video?.kind === 'video' ? joinsOn(timeline, trackOf(video)).find(item => item.outgoing.id === video.id) : undefined;
+      if (cut.clipId !== undefined && (named || cut.at === undefined)) {
+        if (named) add(named, cut);
         else skipped.push({ at: round(video ? endOf(video) : 0), clipId: cut.clipId, reason: !video || video.kind !== 'video' ? 'Not a video clip on this timeline.' : 'No video clip directly follows this one on its layer, so there is no cut here.' });
       } else if (cut.at !== undefined) {
         // A set split edit has two times, the picture edit and the sound edit: either names it.

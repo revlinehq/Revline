@@ -212,6 +212,13 @@ const APPROVED_RULE = 'Approved clips are signed off by the user. Every editing 
 // What a small model still owes after the cut reads clean; it tends to stop at the first thing that works.
 const REST_OF_EDIT = 'Now do the rest of the request in order: the opening clip if it names one, then every image, b-roll and overlay it names at the timeline times of their words (find the phrase in the prose above), then finish. The edit is not done while something the request names is missing.';
 /** Tools a task closed by failed finish checks still answers: its final result, and the agent's own reports. */
+/** What retiming a caption did beside it, for the tool result: an edge stopped at a neighbour, neighbours trimmed or removed. */
+function captionTimingReport(retimed: { neighbours: CaptionNeighbourChange[]; snapped?: { start?: number; end?: number } } | undefined) {
+  if (!retimed) return {};
+  const { neighbours, snapped } = retimed;
+  return { ...(snapped ? { snapped, snapNote: `Stopped this caption at its neighbour instead of overlapping it by under a frame: ${[snapped.start !== undefined ? `start ${snapped.start} s` : '', snapped.end !== undefined ? `end ${snapped.end} s` : ''].filter(Boolean).join(', ')}.` } : {}),
+    ...(neighbours.length ? { neighbours, neighbourNote: `Made room on the caption track: ${neighbours.map(item => item.action === 'removed' ? `removed ${JSON.stringify(item.text)} (${item.reason})` : `trimmed ${JSON.stringify(item.text)} to ${item.to!.start}–${item.to!.end} s`).join('; ')}.` } : {}) };
+}
 /** What a cut kept of ranges that spilled past the clip's retained source, for the tool result. */
 function clampReport(clamped: readonly RetainedRangeClamp[]) {
   if (!clamped.length) return {};
@@ -1364,15 +1371,23 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return { assetId: input.assetId, ...evidence,targets, coverage, precision: input.precision ?? 'sampled', inspectedFrameCount: evidence.frames.length, scope: 'Decoded still images only; timestamps identify sampled frames, not continuous event boundaries or audio evidence.', timelineOccurrences: editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId === input.assetId).map(clip => ({ clipId: clip.id, sourceStart: clip.sourceStart, timelineStart: clip.start, duration: clip.duration, playbackRate: playbackRateOf(clip), ...frameEvidenceOnClip(evidence, clip) })).filter(clip => clip.frames.length > 0) };
       }, { frameRequest }));
     } }),
-    editText: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editText, description: "Change an existing caption or graphic's text and save immediately. Preserve its timing and style. With saved speech evidence, captions must match the measured phrase inside that timing; case and punctuation corrections are allowed. Use setCaptionTiming first when moving phrase boundaries; never add unspoken words.", inputSchema: z.object({ clipId: z.string(), text: z.string().max(2000) }), execute: async (_ctx, input) => checkpoint(t => {
-      const clip = find(t, input.clipId); if (clip.kind !== "caption" && clip.kind !== "graphic") throw new Error("Choose a caption or text graphic");
-      if (clip.kind === 'caption') {
-        const words = retainedSpeechWords(t, assets);
-        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false, checkTiming: false })[0] : undefined;
-        if (mismatch) throw new Error(mismatch);
-      }
-      return patchClip(t, input.clipId, { text: input.text });
-    }) }),
+    editText: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editText, description: "Change an existing caption or graphic's text and save immediately. Preserve its timing and style. With saved speech evidence, captions must match the measured phrase inside that timing; case and punctuation corrections are allowed. A caption's new words and range go in one call: start/end (timeline seconds) retime it as setCaptionTiming does, with neighbouring captions making room. Never add unspoken words.", inputSchema: z.object({ clipId: z.string(), text: z.string().max(2000), start: z.number().min(0).optional().describe('Captions only: new timeline start, as setCaptionTiming.'), end: z.number().min(0).optional().describe('Captions only: new timeline end, as setCaptionTiming.') }), execute: async (_ctx, input) => {
+      let retimed: ReturnType<typeof updateCaptionTiming> | undefined;
+      const result = await checkpoint(t => {
+        const clip = find(t, input.clipId); if (clip.kind !== "caption" && clip.kind !== "graphic") throw new Error("Choose a caption or text graphic");
+        if ((input.start !== undefined || input.end !== undefined) && clip.kind !== 'caption') throw new Error('start and end retime captions only; move a text graphic with resizeClips or move.');
+        let next = patchClip(t, input.clipId, { text: input.text });
+        // The new words decide which neighbours it may absorb, so the range is set after the text.
+        if (input.start !== undefined || input.end !== undefined) { retimed = updateCaptionTiming(next, input.clipId, { start: input.start, end: input.end }); next = retimed.timeline; }
+        if (clip.kind === 'caption') {
+          const words = retainedSpeechWords(next, assets), edited = find(next, input.clipId);
+          const mismatch = words.length ? captionSyncFailures({ ...next, clips: [edited] }, words, { checkCoverage: false, checkTiming: false })[0] : undefined;
+          if (mismatch) throw new Error(mismatch);
+        }
+        return next;
+      });
+      return { ...result, ...captionTimingReport(retimed) };
+    } }),
     styleCaptions: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.styleCaptions, description: "Batch-style existing captions and text graphics using exact clipIds. Without IDs, target captions only. Compose a custom style with installed font, size, weight, italic, spacing, line height, alignment, text-box padding/radius, solid colors, position, rotation, blend, stroke/shadow/glow and optional textCase in one call. Presets are optional starting points, not a requirement. Preserve words unless textCase is explicitly requested, and always preserve timing. Preserve its animation unless explicitly supplied; animation replaces the prior selection independently of appearance. Save immediately.", inputSchema: z.object({ clipIds: z.array(z.string()).min(1).max(200).optional(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), rotation:z.number().min(-360).max(360).optional(),textStyle:textStyleInput.optional(), textCase:z.enum(['sentence','upper','lower']).optional(), animation:z.enum(TEXT_ANIMATION_PRESETS).optional() }), execute: async (_ctx, input) => checkpoint(t => {
       const {clipIds,animation,...style}=input;
       const hasStyle=Object.values(style).some(value=>value!==undefined);
@@ -1407,9 +1422,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return {...result,preset:{number:chosen.number,name:chosen.name,id:chosen.id}};
     }}),
     setCaptionTiming:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setCaptionTiming,description:"Set an existing caption's absolute timeline start/end in seconds, snapped to project frames. Preserve its spoken words and original animation phase; it never generates text or moves footage. Neighbouring captions on its track make room in the same change: an overlapped edge is trimmed, and a neighbour that would be covered (or left mostly covered) is removed only when all its words are in this caption's text; the result's neighbours lists each one. To reword and retime, editText first, then setCaptionTiming. Refuses ranges shorter than one frame, a range inside a neighbour (it would need a split), covering a neighbour whose words this caption does not say, and overlapping a non-caption clip on its V track.",inputSchema:z.object({clipId:z.string(),start:z.number().min(0).optional(),end:z.number().min(0).optional()}).refine(input=>input.start!==undefined||input.end!==undefined,{message:'Specify caption start or end.'}),execute:async(_ctx,{clipId,...range})=>{
-      let neighbours:CaptionNeighbourChange[]=[];
-      const result=await checkpoint(t=>{const retimed=updateCaptionTiming(t,clipId,range);neighbours=retimed.neighbours;return retimed.timeline;});
-      return {...result,...(neighbours.length?{neighbours,neighbourNote:`Made room on the caption track: ${neighbours.map(item=>item.action==='removed'?`removed ${JSON.stringify(item.text)} (${item.reason})`:`trimmed ${JSON.stringify(item.text)} to ${item.to!.start}–${item.to!.end} s`).join('; ')}.`}:{})};
+      let retimed:ReturnType<typeof updateCaptionTiming>|undefined;
+      const result=await checkpoint(t=>{retimed=updateCaptionTiming(t,clipId,range);return retimed.timeline;});
+      return {...result,...captionTimingReport(retimed)};
     }}),
     normalizeAudio:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.normalizeAudio,description:"Normalize a clip (clipId; a video targets its linked sound) or the whole timeline (omit clipId; up to ten minutes) to social loudness, default -14 LUFS integrated with true peak at most -1 dBTP; the media worker measures the retained mix and verifies the result, and preview and export use the same file. Run it after timing and mix are final: later edits bypass it until normalized again. enabled:false removes saved normalization at once. Silent or unmeasurable audio fails without editing.",inputSchema:z.object({clipId:z.string().min(1).optional(),enabled:z.boolean().optional(),targetLufs:z.number().min(-24).max(-9).optional(),truePeak:z.number().min(-6).max(-1).optional()}),execute:async(_ctx,input)=>{
       await editSession.wait();
@@ -1967,8 +1982,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const chosen = input.keep ?? [{ start: speech.clip.sourceStart, end: speech.sourceEnd }];
       return applySpeechCut(input.clipId, speech, chosen, kinds, input.minConfidence ?? .6, input.preview);
     } }),
-    setSplitEdits: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setSplitEdits, description: "Set J and L cuts (split edits) on existing video cuts in ONE saved change, keeping picture and sound in sync and the picture gapless; never build them with unlink, trim, split or move. Without cuts it sets every cut on the main video layer (or track / range); cuts picks some by timeline second (at) or by the video clip before the cut (clipId). type auto (default) picks J or L per cut from the word timings and skips cuts with silence on both sides or one continuous take; J or L only for the user's explicit choice; none removes split edits and relinks picture and sound (do that before a later trim or cut-edge move, then set them again). frames is the picture-to-sound offset, default 10 at 30 fps (8–12 useful). fadeFrames 1–2 hides a click. A cut without room is skipped with its reason; calling again changes nothing. Returns cuts and skippedCuts: tell the user both in a line or two.", inputSchema: z.object({
-      cuts: z.array(z.object({ at: z.number().min(0).optional().describe('Timeline second of the cut.'), clipId: z.string().min(1).max(100).optional().describe('The video clip before the cut.'), type: z.enum(['J', 'L', 'auto', 'none']).optional(), frames: z.number().int().min(1).max(240).optional() }).strict().refine(cut => (cut.at !== undefined) !== (cut.clipId !== undefined), { message: 'Name each cut by at or clipId.' })).min(1).max(200).optional().describe('Omit for every cut on the layer.'),
+    setSplitEdits: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setSplitEdits, description: "Set J and L cuts (split edits) on existing video cuts in ONE saved change, keeping picture and sound in sync and the picture gapless; never build them with unlink, trim, split or move. Without cuts it sets every cut on the main video layer (or track / range); cuts picks some by timeline second (at) or by the video clip before the cut (clipId); with both, clipId names the cut and at is used only when that clip has no cut after it. type auto (default) picks J or L per cut from the word timings and skips cuts with silence on both sides or one continuous take; J or L only for the user's explicit choice; none removes split edits and relinks picture and sound (do that before a later trim or cut-edge move, then set them again). frames is the picture-to-sound offset, default 10 at 30 fps (8–12 useful). fadeFrames 1–2 hides a click. A cut without room is skipped with its reason; calling again changes nothing. Returns cuts and skippedCuts: tell the user both in a line or two.", inputSchema: z.object({
+      cuts: z.array(z.object({ at: z.number().min(0).optional().describe('Timeline second of the cut.'), clipId: z.string().min(1).max(100).optional().describe('The video clip before the cut.'), type: z.enum(['J', 'L', 'auto', 'none']).optional(), frames: z.number().int().min(1).max(240).optional() }).strict().refine(cut => cut.at !== undefined || cut.clipId !== undefined, { message: 'Name the cut: add at (its timeline second) or clipId (the video clip before it).' })).min(1).max(200).optional().describe('Omit for every cut on the layer.'),
       range: z.object({ start: z.number().min(0), end: z.number().positive() }).strict().refine(range => range.end > range.start, { message: 'range.end must be after range.start.' }).optional().describe('Timeline seconds: only cuts inside it (when cuts is omitted).'),
       track: shotTrackInput,
       type: z.enum(['J', 'L', 'auto', 'none']).optional().describe('For every cut that does not name its own. Default auto.'),
