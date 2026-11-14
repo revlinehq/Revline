@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type CSSProperties } from 'react';
-import { AlertTriangle, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronRight, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { toolImages } from './assistant-results';
@@ -122,37 +122,63 @@ function FrameGrid({ frames, sheet }: { frames: Frame[]; sheet: boolean }) {
   </div>;
 }
 
-/** One step on one line: a mark for its state, what it did in plain words, and a muted hint. */
+/** One step on one line: a mark for its state, what it did in plain words, and a muted hint. A failed step stays one
+ * line with a short muted reason; the full error opens when the row is clicked. */
 function StepRow({ row }: { row: Row }) {
+  const [details, setDetails] = useState(false);
   const words = row.plain ? [row.tool, row.tool] as const : runWords(row.tool);
   const Mark = row.state === 'running' ? LoaderCircle : row.state === 'error' ? AlertTriangle : row.state === 'stopped' ? Minus : Check;
+  const line = <>
+    <Mark className={`run-step-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/>
+    <span className={`run-step-label${row.state === 'running' ? ' chat-shimmer' : ''}`}>{row.state === 'done' ? words[1] : words[0]}</span>
+    {[...row.detail, row.count > 1 ? `×${row.count}` : '', row.state === 'stopped' ? 'stopped' : ''].filter(Boolean).map((part, index) => <span key={index} className="run-step-detail">{part}</span>)}
+    {row.reason && !details && <span className="run-step-detail run-step-short-reason">{row.reason}</span>}
+  </>;
+  if (row.reason) return <Collapsible className="run-step" data-state={row.state} open={details} onOpenChange={setDetails}>
+    <CollapsibleTrigger className="run-step-line run-step-toggle">{line}</CollapsibleTrigger>
+    <CollapsibleContent><p className="run-step-reason">{row.reason}</p></CollapsibleContent>
+  </Collapsible>;
   return <div className="run-step" data-state={row.state}>
-    <div className="run-step-line">
-      <Mark className={`run-step-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/>
-      <span className={`run-step-label${row.state === 'running' ? ' chat-shimmer' : ''}`}>{row.state === 'done' ? words[1] : words[0]}</span>
-      {[...row.detail, row.count > 1 ? `×${row.count}` : '', row.state === 'stopped' ? 'stopped' : ''].filter(Boolean).map((part, index) => <span key={index} className="run-step-detail">{part}</span>)}
-    </div>
-    {row.reason && <p className="run-step-reason">{row.reason}</p>}
+    <div className="run-step-line">{line}</div>
     {row.frames.length > 0 && <FrameGrid frames={row.frames} sheet={row.sheet}/>}
   </div>;
 }
 
-/** The run's steps: "Ran N steps" (or "Running N steps" while live) with a plain row per step under a thin rule.
- * Open by default; the heading folds it. */
+/** While a run works only its newest few rows show; the rest fold into one quiet row. */
+const LIVE_ROWS = 3;
+
+/** The run's steps under one heading: "Running N steps" while live, "Ran N steps" when done, with a plain row per step
+ * under a thin rule. Live, the list is open with only the newest rows; done, it folds to the heading. Opening or closing
+ * it by hand holds for this run while it stays on screen. */
 export function RunSteps({ steps, active }: { steps: RunStep[]; active: boolean }) {
-  const [open, setOpen] = useState(true);
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const [earlierOpen, setEarlierOpen] = useState(false);
   if (!steps.length) return null;
+  const open = chosen ?? active;
+  const rows = stepRows(steps);
   const failed = steps.filter(step => step.state === 'error').length, stopped = !active && steps.some(step => step.state === 'stopped');
+  const frames = rows.reduce((total, row) => total + row.frames.length, 0);
   const Status = active ? LoaderCircle : failed ? AlertTriangle : stopped ? CircleStop : CircleCheck;
+  const Chevron = open ? ChevronDown : ChevronRight;
   const n = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
-  return <Collapsible className="run-steps" open={open} onOpenChange={setOpen}>
+  // Live, older rows fold into "N earlier steps"; a finished list opened by hand shows every row.
+  const folded = active && !earlierOpen && rows.length > LIVE_ROWS ? rows.slice(0, -LIVE_ROWS) : [];
+  const shown = folded.length ? rows.slice(-LIVE_ROWS) : rows;
+  const earlier = folded.reduce((total, row) => total + row.count, 0);
+  return <Collapsible className="run-steps" open={open} onOpenChange={setChosen}>
     <CollapsibleTrigger className="run-steps-heading" data-tone={active ? 'running' : failed ? 'error' : stopped ? 'stopped' : 'done'}>
       <Status className={`run-steps-mark${active ? ' animate-spin' : ''}`} aria-hidden="true"/>
       <span className={active ? 'chat-shimmer' : undefined}>{active ? `Running ${n}` : stopped ? `Stopped after ${n}` : `Ran ${n}`}</span>
       {failed > 0 && <span className="run-step-detail">{failed} failed</span>}
+      {!open && frames > 0 && <span className="run-step-detail">{frames} {frames === 1 ? 'frame' : 'frames'}</span>}
+      <Chevron className="run-steps-chevron" aria-hidden="true"/>
     </CollapsibleTrigger>
     <CollapsibleContent className="run-step-list" aria-label="Assistant steps">
-      {stepRows(steps).map(row => <StepRow key={row.key} row={row}/>)}
+      {/* Showing the earlier steps is a choice to keep the list open, so it stays open when the run ends. */}
+      {folded.length > 0 && <Collapsible open={false} onOpenChange={() => { setEarlierOpen(true); setChosen(true); }}>
+        <CollapsibleTrigger className="run-steps-earlier"><span>{earlier} earlier {earlier === 1 ? 'step' : 'steps'}</span><ChevronRight className="run-steps-chevron" aria-hidden="true"/></CollapsibleTrigger>
+      </Collapsible>}
+      {shown.map(row => <StepRow key={row.key} row={row}/>)}
     </CollapsibleContent>
   </Collapsible>;
 }

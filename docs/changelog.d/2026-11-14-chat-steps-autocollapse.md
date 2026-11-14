@@ -1,0 +1,1 @@
+- Editor chat: a running turn shows only its newest three steps under "N earlier steps", a finished turn folds to its heading with failed and frame counts, and a failed step is one line until clicked. Why: the founder found long step lists with expanded orange errors too long to read.
