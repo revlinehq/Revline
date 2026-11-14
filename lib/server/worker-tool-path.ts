@@ -31,8 +31,11 @@ export const pixelTrackPython = () =>
 export const beatTrackPython = () =>
   workerToolPath(process.env.BEAT_TRACK_PYTHON, ".data/beat-tracking/bin/python");
 
-export const beatTrackModelPath = () =>
-  workerToolPath(process.env.BEAT_TRACK_MODEL_PATH, ".data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt");
+/** A configured place outside .data (the image's /opt/models) is kept when empty: the first beat task installs there. */
+export const beatTrackModelPath = () => {
+  const configured = process.env.BEAT_TRACK_MODEL_PATH;
+  return workerToolPath(configured, ".data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt", configured && !/(?:^|[\\/])\.data[\\/]/.test(configured) ? configured : undefined);
+};
 
 export const videoImporterPath = () =>
   workerToolPath(process.env.YT_DLP_PATH, ".data/video-import/bin/yt-dlp", "yt-dlp");

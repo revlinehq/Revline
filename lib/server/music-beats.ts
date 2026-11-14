@@ -1,13 +1,31 @@
 import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { beatTrackModelPath, beatTrackPython } from './worker-tool-path';
+import { existsSync } from 'node:fs';
 import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { AnalysisError } from '../media-analysis/errors';
+import { isAbsolute, join } from 'node:path';
+import { AnalysisError, isMediaDiskFull } from '../media-analysis/errors';
 import { BEAT_ANALYSIS_ENGINE, MAX_MUSIC_ENERGY_SECONDS, type BeatMap, type MusicEnergy } from '../media-analysis/beat-map';
 import { musicEnergy, SOUND_RATE } from '../media-analysis/sound';
 
+let installing: Promise<void> | undefined, failedAt = 0;
+/** An image built while every model source was down installs the pinned checkpoint on its first beat task. */
+function ensureBeatModel(model: string, signal: AbortSignal) {
+  if (existsSync(model)) return Promise.resolve();
+  const unavailable = new AnalysisError('Music tracking is unavailable: the pinned Beat This model could not be downloaded. Try again later.', 503, true);
+  // After a failed install, fail fast for a while instead of tying up the worker on every queued task.
+  if (Date.now() - failedAt < 10 * 60_000) return Promise.reject(unavailable);
+  installing ??= run(process.execPath, [join(process.cwd(), 'scripts/install-beat-model.mjs')], { env: { ...process.env, BEAT_TRACK_MODEL_PATH: model }, signal, timeout: 20 * 60_000, maxBuffer: 1024 * 1024 })
+    .then(() => { installing = undefined; }, error => {
+      installing = undefined;
+      if (signal.aborted) throw error;
+      failedAt = Date.now();
+      console.error('Beat model install failed', (error as { stderr?: string }).stderr || error);
+      throw isMediaDiskFull(error) ? error : unavailable;
+    });
+  return installing;
+}
 
 /** Run the pinned music tracker in the background worker, never in a browser. */
 export async function detectMusicBeats(source: string, duration: number, signal: AbortSignal): Promise<BeatMap> {
@@ -18,6 +36,8 @@ export async function detectMusicBeats(source: string, duration: number, signal:
     await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio, '-map', '0:a:0', '-vn', '-t', ffmpegTime(MAX_MUSIC_ENERGY_SECONDS), '-ac', '2', '-ar', String(SOUND_RATE), '-f', 'f32le', '-y', raw], { signal, timeout: /^https?:\/\//.test(source) ? undefined : 60_000, maxBuffer: 1024 * 1024 });
     const python = beatTrackPython();
     const model = beatTrackModelPath();
+    if (isAbsolute(python) && !existsSync(python)) throw new AnalysisError('Music tracking is not configured on the media worker. Install the pinned Beat This dependencies and model.', 503);
+    await ensureBeatModel(model, signal);
     let stdout: string;
     try {
       ({ stdout } = await run(python, [join(process.cwd(), 'scripts/detect-beats.py'), audio, model], { signal, timeout: 180_000, maxBuffer: 1024 * 1024 }));
