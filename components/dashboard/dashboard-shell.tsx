@@ -5,8 +5,9 @@ import Link, { useLinkStatus } from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { PrefetchKind } from 'next/dist/client/components/router-reducer/router-reducer-types';
 import { useUser } from '@clerk/nextjs';
-import { ArrowUpRight } from 'lucide-react';
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { ArrowUpRight, LifeBuoy } from 'lucide-react';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
+import { DISCORD_URL } from '@/components/workspace/discord-link';
 import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
 import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH, sidebarCookieCollapsed } from '@/lib/workspace-routes';
 import { DashboardShellContext } from './shell-context';
@@ -14,7 +15,7 @@ import { DashboardNavbar } from './dashboard-navbar';
 import { DASHBOARD_NAV, activeDashboardItem, dashboardShowsNavbar, type DashboardNavItem } from './dashboard-nav';
 import './dashboard.css';
 
-const NAV_ITEMS = DASHBOARD_NAV.flatMap(group => group.items).filter(item => !item.external);
+const NAV_ITEMS = DASHBOARD_NAV.flatMap(group => group.items);
 /** The whole page, not only its loading frame, so the click itself asks the server nothing. */
 const WHOLE_PAGE = { kind: 'full' as PrefetchKind };
 const noSubscription = () => () => {};
@@ -39,12 +40,17 @@ function NavRow({ item, active, onPending }: { item: DashboardNavItem; active: b
     // dropped in memory at once and the page opens without waiting for the stored copy to be cleared.
     if (item.href === NEW_PROJECT_PATH && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) void startNewWorkspace(user?.id).catch(() => { /* The start page still opens with the previous draft. */ });
   }
-  if (item.external) return <SidebarMenuItem><SidebarMenuButton asChild tooltip={item.label} className="dash-nav-row">
-    <a href={item.href} target="_blank" rel="noreferrer" onClick={() => setOpenMobile(false)}><Icon aria-hidden="true" /><span>{item.label}</span><ArrowUpRight aria-hidden="true" className="dash-nav-external" /></a>
-  </SidebarMenuButton></SidebarMenuItem>;
   return <SidebarMenuItem><SidebarMenuButton asChild isActive={active} tooltip={item.label} className="dash-nav-row">
     <Link href={item.href} prefetch data-icon-style={item.strokeIcon ? 'stroke' : undefined} aria-current={active ? 'page' : undefined} onClick={open}><NavPending onChange={report} /><Icon aria-hidden="true" /><span>{item.label}</span></Link>
   </SidebarMenuButton></SidebarMenuItem>;
+}
+
+/** Pinned to the sidebar's foot, apart from the nav groups: Support opens the community Discord in a new tab. */
+function SupportRow() {
+  const { setOpenMobile } = useSidebar();
+  return <SidebarMenu className="dash-nav-list"><SidebarMenuItem><SidebarMenuButton asChild tooltip="Support" className="dash-nav-row">
+    <a href={DISCORD_URL} target="_blank" rel="noreferrer" onClick={() => setOpenMobile(false)}><LifeBuoy aria-hidden="true" /><span>Support</span><ArrowUpRight aria-hidden="true" className="dash-nav-external" /></a>
+  </SidebarMenuButton></SidebarMenuItem></SidebarMenu>;
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
@@ -72,6 +78,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <SidebarMenu className="dash-nav-list">{group.items.map(item => <NavRow key={item.href} item={item} active={item === active} onPending={onPending} />)}</SidebarMenu>
           </SidebarGroup>)}
         </SidebarContent>
+        <SidebarFooter className="dash-sidebar-footer"><SupportRow /></SidebarFooter>
       </Sidebar>
       <SidebarInset className="dash-main">
         {dashboardShowsNavbar(pathname) && <DashboardNavbar />}

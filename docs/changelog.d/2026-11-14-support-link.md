@@ -1,1 +1,1 @@
-- Dashboard: Support in the sidebar's Account group and the avatar menu opens the community Discord in a new tab. Why: the founder asked for a way to reach support from the profile or sidebar.
+- Dashboard: Support, pinned to the sidebar's footer and in the avatar menu, opens the community Discord in a new tab. Why: the founder asked for a way to reach support from the profile or sidebar.
