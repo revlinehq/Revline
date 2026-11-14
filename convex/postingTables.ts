@@ -64,9 +64,10 @@ export const postingTables = {
   // No longer written: a pending sign-in to one of Revline's own platform apps. Leftover rows are deleted by posting.tick.
   postingOauthStates: defineTable({ nonce: v.string(), ownerId: v.string(), platform: postingPlatform, expiresAt: v.number() })
     .index('by_nonce', ['nonce']).index('by_expiresAt', ['expiresAt']),
-  // One submit of the Post dialog: an export sent to several accounts with a shared default caption.
+  // One submit of the Post dialog: an export, or a video from the Library (`fileId`, with no job or project), sent to
+  // several accounts with a shared default caption.
   postingBatches: defineTable({
-    ownerId: v.string(), jobId: v.id('renderJobs'), projectId: v.id('projects'), exportLabel: v.string(),
+    ownerId: v.string(), jobId: v.optional(v.id('renderJobs')), projectId: v.optional(v.id('projects')), fileId: v.optional(v.id('storageObjects')), exportLabel: v.string(),
     caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()),
     // Typed once convex/campaigns exists.
     campaignId: v.optional(v.string()), createdAt: v.number(), ...postAuthor,
@@ -74,7 +75,8 @@ export const postingTables = {
   // One post to one account. `caption` is the text this account posts (the batch default or its override).
   // `dueAt` is when the scheduler acts next: the scheduled time, a retry time, or the next processing check.
   postingPosts: defineTable({
-    ownerId: v.string(), batchId: v.id('postingBatches'), accountId: v.id('postingAccounts'), platform: postingPlatform, jobId: v.id('renderJobs'),
+    // What is sent: an export (`jobId`) or a Library video (`fileId`), the same as its batch.
+    ownerId: v.string(), batchId: v.id('postingBatches'), accountId: v.id('postingAccounts'), platform: postingPlatform, jobId: v.optional(v.id('renderJobs')), fileId: v.optional(v.id('storageObjects')),
     caption: v.string(), title: v.optional(v.string()), status: postStatus, error: v.optional(v.string()), attempts: v.number(),
     scheduledAt: v.optional(v.number()), dueAt: v.number(), claimedAt: v.optional(v.number()),
     platformJobId: v.optional(v.string()), platformPostId: v.optional(v.string()), url: v.optional(v.string()), publishedAt: v.optional(v.number()),

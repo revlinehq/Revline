@@ -8,6 +8,7 @@ import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ScheduleFileButton } from '@/components/posting/post-dialog';
 import { userError } from '@/lib/user-error';
 import { KIND_LABELS, formatBytes, formatDimensions, formatDuration, longDate } from './format';
 import { FileThumb, RenameInput, type LibraryFile } from './library-tiles';
@@ -85,6 +86,7 @@ function FileDetails({ file, folderName, archived, onAddToProject, onMove, onDow
       <Button variant="soft" onClick={onRestore}><ArchiveRestore aria-hidden="true" />Restore</Button>
       <Button variant="soft" onClick={onDownload}><Download aria-hidden="true" />Download</Button>
     </div> : <div className="library-sheet-actions">
+      {(file.kind === 'video' || file.kind === 'export') && <ScheduleFileButton fileId={file.id} />}
       <Button variant="soft" onClick={onAddToProject}><Clapperboard aria-hidden="true" />Add to project</Button>
       <Button variant="soft" onClick={onMove}><FolderInput aria-hidden="true" />Move to</Button>
       <Button variant="soft" onClick={onDownload}><Download aria-hidden="true" />Download</Button>

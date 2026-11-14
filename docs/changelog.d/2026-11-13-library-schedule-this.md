@@ -1,0 +1,1 @@
+- Library: "Schedule this" on a video or export opens the Post dialog and posts the stored file as it is, with no export. Why: the founder wanted to schedule videos straight from the Library.

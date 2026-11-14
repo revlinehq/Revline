@@ -34,6 +34,15 @@ export function PostButton({ jobId, size = 'default', className }: { jobId: stri
   </>;
 }
 
+/** "Schedule this" on a Library file: opens the Post dialog with that file as the video, posted as it is stored. */
+export function ScheduleFileButton({ fileId }: { fileId: Id<'storageObjects'> }) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <Button variant="secondary" onClick={() => setOpen(true)}><CalendarDays aria-hidden="true" />Schedule this</Button>
+    {open && <PostDialog fileId={fileId} onClose={() => setOpen(false)} />}
+  </>;
+}
+
 /** A timeline tab in the editor, posted through the export-then-post flow (convex/postExports.ts). */
 export type PostTimeline = {
   projectId: Id<'projects'>; timelineId: string; name: string; durationSeconds: number; coverUrl: string | null;
@@ -46,22 +55,24 @@ export type PostTimeline = {
  * offers the owner's recent finished exports to choose from. With `timeline` it posts that editor tab instead:
  * Revline exports it first (or reuses a finished export of the same version), then posts. `onPostsPage`: the new
  * row is already in view behind the dialog, so it closes on success instead of pointing at the Posts page.
- * `scheduleAt` fills the schedule in: "Post here" on a calendar day.
+ * `scheduleAt` fills the schedule in: "Post here" on a calendar day. With `fileId` it posts that Library file as it is
+ * stored, with no export ("Schedule this" in the Library).
  */
-export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, onClose }: { jobId?: Id<'renderJobs'>; timeline?: PostTimeline; onPostsPage?: boolean; scheduleAt?: number; onClose: () => void }) {
+export function PostDialog({ jobId, timeline, fileId, onPostsPage = false, scheduleAt, onClose }: { jobId?: Id<'renderJobs'>; timeline?: PostTimeline; fileId?: Id<'storageObjects'>; onPostsPage?: boolean; scheduleAt?: number; onClose: () => void }) {
   const { isAuthenticated } = useConvexAuth();
-  const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId && !timeline ? {} : 'skip');
+  const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId && !timeline && !fileId ? {} : 'skip');
+  const stored = useQuery(api.posting.libraryClip, isAuthenticated && fileId ? { fileId } : 'skip');
   const [choice, setChoice] = useState<Id<'renderJobs'> | null>(null);
   // The newest export is offered first, then stays put: an export finishing while the dialog is open must not swap the clip under the caption.
   const newest = finished?.[0]?.jobId;
   useEffect(() => { if (newest) setChoice(previous => previous ?? newest); }, [newest]);
-  const current = jobId ?? choice ?? undefined;
+  const current = fileId ? undefined : jobId ?? choice ?? undefined;
   const exported = useQuery(api.posting.clip, isAuthenticated && current ? { jobId: current } : 'skip');
-  /** What is posted: the export, or the timeline tab that is exported first. */
-  const clip = timeline ? { label: timeline.name, durationSeconds: timeline.durationSeconds, coverUrl: timeline.coverUrl, coverKind: timeline.coverUrl ? 'image' as const : null } : exported;
+  /** What is posted: the export, the timeline tab that is exported first, or the Library file. */
+  const clip = timeline ? { label: timeline.name, durationSeconds: timeline.durationSeconds, coverUrl: timeline.coverUrl, coverKind: timeline.coverUrl ? 'image' as const : null } : fileId ? stored : exported;
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
-  const createBatch = useMutation(api.posting.createBatch), startPost = useMutation(api.postExports.start), readCreator = useAction(api.postingActions.tiktokCreator);
+  const createBatch = useMutation(api.posting.createBatch), createFileBatch = useMutation(api.posting.createFileBatch), startPost = useMutation(api.postExports.start), readCreator = useAction(api.postingActions.tiktokCreator);
   const [creators, setCreators] = useState<Record<string, TikTokCreator>>({}), [tiktok, setTiktok] = useState<Record<string, TikTokChoice>>({});
   /** The latest creator-info request per picked TikTok account: an answer to an older one is dropped. */
   const asked = useRef(new Map<string, number>());
@@ -93,7 +104,8 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, o
   // The first thing still missing for a TikTok account; the post buttons stay off until there is none.
   /** Posting is not set up on the server: the accounts are listed but none can be picked, and the line beside the buttons says why. */
   const off = !!platforms && !live.size;
-  const blocked = off ? POSTING_NOT_SET_UP : onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '';
+  // A Library video is sent as it is stored, so a picked platform that would refuse it blocks the buttons too.
+  const blocked = off ? POSTING_NOT_SET_UP : stored?.problem || picked.map(account => stored?.platformProblems[account.platform]).find(Boolean) || (onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '');
   /** A picked time makes this a scheduled post; without one it goes out now. */
   const schedule = !!when;
   async function submit() {
@@ -110,7 +122,8 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, o
       if (timeline) {
         await timeline.onBeforePost();
         await startPost({ projectId: timeline.projectId, timelineId: timeline.timelineId, ...text, accountIds: targets.map(target => target.accountId), targets });
-      } else if ('jobId' in clip) await createBatch({ jobId: clip.jobId, ...text, targets });
+      } else if (fileId) await createFileBatch({ fileId, ...text, targets });
+      else if ('jobId' in clip) await createBatch({ jobId: clip.jobId, ...text, targets });
       if (onPostsPage) onClose();
       else setSent({ count: targets.length, scheduledAt, tiktok: onTikTok.length > 0, exporting: !!timeline });
     } catch (reason) { setError(userError(reason, schedule ? 'Could not schedule this clip.' : 'Could not post this clip.')); }
@@ -118,7 +131,7 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, o
   }
   const label = clip?.label ?? finished?.find(entry => entry.jobId === current)?.label;
   const detail = clip && clip.durationSeconds !== null ? clipLength(clip.durationSeconds) : '';
-  const missing = jobId ? clip === null : !timeline && finished !== undefined && !finished.length;
+  const missing = jobId || fileId ? clip === null : !timeline && finished !== undefined && !finished.length;
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="post-dialog">
     <div className="post-dialog-head"><DialogTitle>{sent ? sent.scheduledAt ? 'Scheduled' : 'Posting now' : 'Post clip'}</DialogTitle></div>
     <DialogDescription className="sr-only">Send this clip to your connected accounts, now or at a time you pick.</DialogDescription>
@@ -129,8 +142,8 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, o
       </div>
       <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
     </> : missing ? <>
-      <div className="post-dialog-done">{jobId ? <p>This clip can no longer be posted. Export it again, then post it.</p> : <><h3>No clips to post yet</h3><p>Export a clip in the editor, then post it from here.</p></>}</div>
-      <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Close</Button>{!jobId && <Button asChild variant="primary"><Link href={NEW_PROJECT_PATH}>Open the editor</Link></Button>}</div>
+      <div className="post-dialog-done">{fileId ? <p>This file is no longer in your Library.</p> : jobId ? <p>This clip can no longer be posted. Export it again, then post it.</p> : <><h3>No clips to post yet</h3><p>Export a clip in the editor, then post it from here.</p></>}</div>
+      <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Close</Button>{!jobId && !fileId && <Button asChild variant="primary"><Link href={NEW_PROJECT_PATH}>Open the editor</Link></Button>}</div>
     </> : <>
       <div className="post-dialog-body">
         <div className="post-dialog-side">

@@ -118,7 +118,7 @@ export async function deleteAccount(apiKey: string, id: number): Promise<void> {
 // ---------------------------------------------------------------- media and posts
 
 /** A media record and the signed address its file is PUT to. Post Bridge deletes the file once the post using it has published, or after a day unused. */
-export async function createUpload(apiKey: string, input: { name: string; mimeType: 'video/mp4'; bytes: number }): Promise<{ mediaId: string; uploadUrl: string }> {
+export async function createUpload(apiKey: string, input: { name: string; mimeType: 'video/mp4' | 'video/quicktime'; bytes: number }): Promise<{ mediaId: string; uploadUrl: string }> {
   const body = record(await call(apiKey, 'POST', '/media/create-upload-url', { body: { name: input.name, mime_type: input.mimeType, size_bytes: input.bytes } }));
   const mediaId = text(body.media_id), uploadUrl = text(body.upload_url);
   if (!mediaId || !uploadUrl || !/^https:\/\//.test(uploadUrl)) throw new PostingError(`${SERVICE} returned no upload address. Revline will try again.`, true, 'no_upload');

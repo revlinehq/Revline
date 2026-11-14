@@ -24,6 +24,15 @@ export function shapeProblems(platform: PostingPlatform, { durationSeconds, widt
 }
 
 /** Why this platform cannot take this caption and title, or an empty list. */
+/** The first thing this platform would refuse about a file of this length, size and byte count: what is checked before it is sent, and when a stored video is scheduled. */
+export function fileProblem(platform: PostingPlatform, input: PostShape & { videoBytes: number }): string | undefined {
+  const megabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
+  return shapeProblems(platform, input)[0]
+    ?? (!(input.videoBytes > 0) ? 'The video file is empty or its size is unknown. Export the video again, then post it.' : undefined)
+    ?? (platform === 'instagram' && input.videoBytes > REEL_LIMITS.maxBytes ? `Instagram Reels can be at most ${megabytes(REEL_LIMITS.maxBytes)} MB. Export at a lower quality and try again.` : undefined)
+    ?? (platform === 'tiktok' && input.videoBytes > VIDEO_LIMITS.maxBytes ? 'The video is larger than 4 GB, the most TikTok accepts.' : undefined);
+}
+
 export function textProblems(platform: PostingPlatform, { caption, title }: PostText): string[] {
   const problems: string[] = [], name = PLATFORM_NAMES[platform];
   if (platform === 'instagram') {
