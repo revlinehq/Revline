@@ -33,6 +33,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   moveClips: { effect: 'timeline', mcp: 'exclusive', label: ['Arranging clips', 'Arranged clips'] },
   resizeClips: { effect: 'timeline', mcp: 'exclusive', label: ['Trimming clips', 'Trimmed clips'] },
   swapClips: { effect: 'timeline', mcp: 'exclusive', label: ['Swapping shots', 'Swapped shots'] },
+  joinClips: { effect: 'timeline', mcp: 'exclusive', label: ['Joining clips', 'Joined clips'] },
   setBlendMode: { effect: 'timeline', mcp: 'exclusive', label: ['Adjusting compositing', 'Adjusted compositing'] },
   undoLatestEdit: { effect: 'timeline', mcp: 'exclusive', label: ['Reverting latest edit', 'Reverted latest edit'] },
   listRevisions: { effect: 'read', mcp: 'read' },

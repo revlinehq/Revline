@@ -1,12 +1,14 @@
 import { deriveTrackCounts, layerGroup, maxTrackCount, trackOf, type Clip, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
+import { soundFor, type AudioAssetOf } from './join-clips';
 
 const media = (clip: Clip) => clip.kind === 'video' || clip.kind === 'image';
 const overlaps = (a: Clip, b: Clip) => a.start < b.start + b.duration - 1e-6 && b.start < a.start + a.duration - 1e-6;
 
-/** Close footage gaps without changing retained source ranges or linked audio sync: every gap on every
+/** Close footage gaps without changing retained source ranges or audio sync (linked sound, and with `audioAssetOf` the
+ * unlinked sound of the same take, moves with its picture): every gap on every
  * visual layer in one change (also gaps shorter than a frame), or only between the selected clips. */
-export function closeFootageGaps(timeline: Timeline, selectedIds: readonly string[] = [], onlyTracks?: readonly number[]): Timeline {
+export function closeFootageGaps(timeline: Timeline, selectedIds: readonly string[] = [], onlyTracks?: readonly number[], audioAssetOf?: AudioAssetOf): Timeline {
   const selected = new Set(selectedIds);
   for (const clip of timeline.clips) if (clip.kind === 'audio' && selected.has(clip.id) && clip.linkedClipId) selected.add(clip.linkedClipId);
   const selectedMedia = timeline.clips.filter(clip => media(clip) && selected.has(clip.id));
@@ -27,6 +29,8 @@ export function closeFootageGaps(timeline: Timeline, selectedIds: readonly strin
         offsets.set(clip.id, delta);
         const linked = clip.linkedClipId ? byId.get(clip.linkedClipId) : undefined;
         if (linked?.kind === 'audio' && linked.linkedClipId === clip.id) offsets.set(linked.id, delta);
+        // Unlinked sound of the same take under it (after the user split picture and sound apart) moves with it too.
+        else if (!clip.linkedClipId && audioAssetOf) { const sound = soundFor(timeline, clip, audioAssetOf); if (sound && !offsets.has(sound.id) && !timeline.clips.some(other => other.id !== clip.id && other.kind === 'video' && soundFor(timeline, other, audioAssetOf)?.id === sound.id)) offsets.set(sound.id, delta); }
       }
       end = Math.max(end, start + clip.duration);
     }
