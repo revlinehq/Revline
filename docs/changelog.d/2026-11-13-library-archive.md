@@ -1,0 +1,1 @@
+- Library: files and folders can be archived and restored from an Archived view, with undo; archived items leave the Library, its search, the editor's media picker and Add to project, while projects using them keep playing and exporting. Why: the founder asked for a way to declutter the Library without deleting anything.

@@ -9,7 +9,7 @@ import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { hasPreview, mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ownedObjectReferences, recordAssetStorage, recordStorageObject } from './lib/storage_accounting';
-import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, liveFolderId, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
+import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, archiveRoot, folderName, freeName, lineage, liveFolderId, openFolderId, openFolders, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
 import { beginProjectDeletion, copyMediaFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { cancelMediaTask } from './lib/media_queue';
@@ -64,6 +64,17 @@ async function tileThumbnail(ctx: QueryCtx, row: Doc<'storageObjects'>) {
   return url ? { url, video: !thumbnail && row.kind !== 'image' } : null;
 }
 const tileThumbnailValue = v.object({ url: v.string(), video: v.boolean() });
+/** Pictures for a folder tile from the three newest files directly in it: its open files, or for an archived folder
+ * the files archived with it. */
+async function folderThumbnails(ctx: QueryCtx, folder: Folder, archived: boolean) {
+  const files = ctx.db.query('storageObjects').withIndex('by_owner_folder_archived_created', q => {
+    const inFolder = q.eq('ownerId', folder.ownerId).eq('auxiliary', false).eq('pending', false).eq('folderId', folder._id);
+    return archived ? inFolder.gte('archivedAt', 0) : inFolder.eq('archivedAt', undefined);
+  });
+  // Files archived on their own before the folder are listed apart, so they are not its pictures.
+  const newest = archived ? (await files.order('desc').take(12)).filter(row => row.archivedWith === folder._id).slice(0, 3) : await files.order('desc').take(3);
+  return (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(thumbnail => thumbnail !== null);
+}
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -72,19 +83,18 @@ const tileThumbnailValue = v.object({ url: v.string(), video: v.boolean() });
 export const folders = query({ args: { parentId: v.optional(folderId) }, returns: v.array(v.object({ ...folderSummary, thumbnails: v.array(tileThumbnailValue) })), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
   if (args.parentId && (await ctx.db.get(args.parentId))?.ownerId !== ownerId) return [];
-  const rows = (await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', args.parentId)).take(MAX_FOLDERS)).filter(row => !row.deleting);
+  const rows = (await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', args.parentId)).take(MAX_FOLDERS)).filter(row => !row.deleting && row.archivedAt === undefined);
   rows.sort((a, b) => a.name.localeCompare(b.name));
   return Promise.all(rows.map(async (folder, index) => {
     // Pictures come from the three newest files directly in the folder, by index, for the first tiles only:
     // a long row of folders does not read every folder's files.
-    const newest = folder.fileCount && index < THUMBNAIL_FOLDERS ? await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('folderId', folder._id)).order('desc').take(3) : [];
-    const thumbnails = (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(thumbnail => thumbnail !== null);
+    const thumbnails = folder.fileCount && index < THUMBNAIL_FOLDERS ? await folderThumbnails(ctx, folder, false) : [];
     return { ...summarize(folder), thumbnails };
   }));
 } });
 /** Every folder of the account, flat: the Move dialog's tree and the folder search. */
 export const folderTree = query({ args: {}, returns: v.array(v.object(folderSummary)), handler: async ctx => {
-  const all = await ownerFolders(ctx, await requireOwner(ctx));
+  const all = openFolders(await ownerFolders(ctx, await requireOwner(ctx)));
   return [...all.values()].map(summarize).sort((a, b) => a.name.localeCompare(b.name));
 } });
 /** The breadcrumb for a folder, outermost first. Null when the folder is gone or the ID is not a folder's. */
@@ -95,29 +105,37 @@ export const folderPath = query({ args: { folderId: v.string() }, returns: v.uni
   if (!start) return null;
   for (let id: Id<'storageFolders'> | undefined = start; id && path.length <= MAX_FOLDER_DEPTH + 1;) {
     const folder: Folder | null = await ctx.db.get(id);
-    if (!folder || folder.ownerId !== ownerId || folder.deleting) return null;
+    if (!folder || folder.ownerId !== ownerId || folder.deleting || folder.archivedAt !== undefined) return null;
     path.unshift({ id: folder._id, name: folder.name }); id = folder.parentId;
   }
   return path;
 } });
-/** The files directly in one folder (the root when `folderId` is absent). A search covers the whole Library. */
+/** One listed file as a Library tile or row shows it. */
+async function listItem(ctx: QueryCtx, row: Doc<'storageObjects'>, reads: ReturnType<typeof listingReads>) {
+  const { peaks, ...file } = await describe(ctx, row, reads);
+  const videoUrl = (file.kind === 'video' || file.kind === 'export') && !file.thumbnailUrl ? await mediaUrl(ctx, row) : null;
+  return { ...file, folderId: row.folderId ?? null, waveform: waveformBars(peaks), videoUrl };
+}
+/** The files directly in one folder (the root when `folderId` is absent). A search covers the whole Library. Archived
+ * files are left out of both. */
 export const files = query({ args: { paginationOpts: paginationOptsValidator, folderId: v.optional(folderId), search: v.optional(v.string()), unused: v.optional(v.boolean()), sort: v.union(v.literal('newest'), v.literal('oldest'), v.literal('largest')) },
   returns: v.object({ page: v.array(libraryItem), isDone: v.boolean(), continueCursor: v.string(), splitCursor: v.optional(v.union(v.string(), v.null())), pageStatus: v.optional(v.union(v.literal('SplitRecommended'), v.literal('SplitRequired'), v.null())) }),
   handler: async (ctx, args) => {
     const ownerId = await requireOwner(ctx);
     if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 40) throw new ConvexError('Load up to 40 files');
     const search = args.search?.trim() ?? ''; if (search.length > 120) throw new ConvexError('Search is too long');
-    if (args.folderId && (await ctx.db.get(args.folderId))?.ownerId !== ownerId) return { page: [], isDone: true, continueCursor: '' };
+    const folder = args.folderId ? await ctx.db.get(args.folderId) : null;
+    if (args.folderId && (folder?.ownerId !== ownerId || folder.archivedAt !== undefined)) return { page: [], isDone: true, continueCursor: '' };
     const base = ctx.db.query('storageObjects'), scope = visible(ownerId);
-    const index = args.sort === 'largest' ? 'by_owner_folder_size' : 'by_owner_folder_created';
-    const listing = search ? base.withSearchIndex('search_name', q => q.search('fileName', search).eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false))
-      : base.withIndex(index, q => q.eq('ownerId', scope.ownerId).eq('auxiliary', scope.auxiliary).eq('pending', scope.pending).eq('folderId', args.folderId)).order(args.sort === 'oldest' ? 'asc' : 'desc');
+    const index = args.sort === 'largest' ? 'by_owner_folder_archived_size' : 'by_owner_folder_archived_created';
+    const listing = search ? base.withSearchIndex('search_live_name', q => q.search('fileName', search).eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('archivedAt', undefined))
+      : base.withIndex(index, q => q.eq('ownerId', scope.ownerId).eq('auxiliary', scope.auxiliary).eq('pending', scope.pending).eq('folderId', args.folderId).eq('archivedAt', undefined)).order(args.sort === 'oldest' ? 'asc' : 'desc');
     const page = await listing.paginate(args.paginationOpts);
-    const reads = listingReads(ctx), rows = await Promise.all(page.page.map(async row => {
-      const { peaks, ...file } = await describe(ctx, row, reads);
-      const videoUrl = (file.kind === 'video' || file.kind === 'export') && !file.thumbnailUrl ? await mediaUrl(ctx, row) : null;
-      return { ...file, folderId: row.folderId ?? null, waveform: waveformBars(peaks), videoUrl };
-    }));
+    // A large folder archive marks its files in batches; until it finishes, a search leaves out files whose folder is archived.
+    const archivedFolder = new Map<Id<'storageFolders'>, Promise<boolean>>();
+    const inArchived = (id: Id<'storageFolders'>) => { if (!archivedFolder.has(id)) archivedFolder.set(id, ctx.db.get(id).then(home => home?.archivedAt !== undefined)); return archivedFolder.get(id)!; };
+    const found = search ? (await Promise.all(page.page.map(async row => row.folderId && await inArchived(row.folderId) ? null : row))).filter(row => row !== null) : page.page;
+    const reads = listingReads(ctx), rows = await Promise.all(found.map(row => listItem(ctx, row, reads)));
     return { ...page, page: args.unused ? rows.filter(row => row.canDelete && !row.inUse) : rows };
   } });
 
@@ -145,17 +163,17 @@ async function insertFolder(ctx: MutationCtx, ownerId: string, all: Map<Id<'stor
   return ctx.db.insert('storageFolders', { ownerId, name, ...(parentId ? { parentId } : {}), createdAt: now, updatedAt: now, fileCount: 0, totalBytes: 0 });
 }
 export const createFolder = mutation({ args: { name: v.string(), parentId: v.optional(folderId) }, returns: folderId, handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), name = folderName(args.name), all = await ownerFolders(ctx, ownerId);
+  const ownerId = await requireOwner(ctx), name = folderName(args.name), all = await ownerFolders(ctx, ownerId), open = openFolders(all);
   if (args.parentId) {
-    if (all.get(args.parentId)?.ownerId !== ownerId) throw new ConvexError('Folder not found');
+    if (open.get(args.parentId)?.ownerId !== ownerId) throw new ConvexError('Folder not found');
     if (lineage(all, args.parentId).length >= MAX_FOLDER_DEPTH) throw new ConvexError(`Folders nest up to ${MAX_FOLDER_DEPTH} levels`);
   }
-  requireFreeName(siblingNames(all, args.parentId), name);
+  requireFreeName(siblingNames(open, args.parentId), name);
   return insertFolder(ctx, ownerId, all, name, args.parentId);
 } });
 /** The suggested starting folders, created empty at the root. Names that already exist there are skipped; no file moves. */
 export const createStarterFolders = mutation({ args: {}, returns: v.array(folderId), handler: async ctx => {
-  const ownerId = await requireOwner(ctx), all = await ownerFolders(ctx, ownerId), taken = siblingNames(all, undefined).map(name => name.toLocaleLowerCase());
+  const ownerId = await requireOwner(ctx), all = await ownerFolders(ctx, ownerId), taken = siblingNames(openFolders(all), undefined).map(name => name.toLocaleLowerCase());
   const created: Id<'storageFolders'>[] = [];
   for (const name of STARTER_FOLDERS) {
     if (taken.includes(name.toLocaleLowerCase())) continue;
@@ -167,7 +185,7 @@ export const createStarterFolders = mutation({ args: {}, returns: v.array(folder
 export const renameFolder = mutation({ args: { folderId, name: v.string() }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), folder = await ownedFolder(ctx, ownerId, args.folderId), name = folderName(args.name);
   if (name === folder.name) return null;
-  requireFreeName(siblingNames(await ownerFolders(ctx, ownerId), folder.parentId, folder._id), name);
+  requireFreeName(siblingNames(openFolders(await ownerFolders(ctx, ownerId)), folder.parentId, folder._id), name);
   await ctx.db.patch(folder._id, { name, updatedAt: Date.now() });
   return null;
 } });
@@ -176,31 +194,30 @@ export const move = mutation({ args: { fileIds: v.array(v.id('storageObjects')),
   const ownerId = await requireOwner(ctx), fileIds = [...new Set(args.fileIds)], folderIds = [...new Set(args.folderIds)], target = args.targetFolderId;
   if (!fileIds.length && !folderIds.length) throw new ConvexError('Choose what to move');
   if (fileIds.length > 100 || folderIds.length > 20) throw new ConvexError('Move up to 100 files and 20 folders at a time');
-  const all = await ownerFolders(ctx, ownerId);
-  if (target && all.get(target)?.ownerId !== ownerId) throw new ConvexError('Folder not found');
+  const all = await ownerFolders(ctx, ownerId), open = openFolders(all);
+  if (target && open.get(target)?.ownerId !== ownerId) throw new ConvexError('Folder not found');
   const now = Date.now();
   for (const id of folderIds) {
-    const known = all.get(id);
+    const known = open.get(id);
     if (!known || known.ownerId !== ownerId) throw new ConvexError('Folder not found');
     if (known.parentId === target) continue;
     const above = lineage(all, target);
     if (above.some(folder => folder._id === id)) throw new ConvexError(`“${known.name}” cannot move into itself or a folder inside it`);
-    // Levels the moved folder brings with it, counted from its deepest descendant.
-    const height = Math.max(...[...all.values()].map(folder => { const path = lineage(all, folder._id), at = path.findIndex(step => step._id === id); return at < 0 ? 0 : at + 1; }));
-    if (above.length + height > MAX_FOLDER_DEPTH) throw new ConvexError(`Folders nest up to ${MAX_FOLDER_DEPTH} levels`);
-    requireFreeName(siblingNames(all, target, id), known.name);
+    if (above.length + folderHeight(all, id) > MAX_FOLDER_DEPTH) throw new ConvexError(`Folders nest up to ${MAX_FOLDER_DEPTH} levels`);
+    requireFreeName(siblingNames(open, target, id), known.name);
     // Totals may have changed earlier in this call.
     const folder = (await ctx.db.get(id))!;
     await adjustFolderTotals(ctx, folder.parentId, -folder.fileCount, -folder.totalBytes);
     await ctx.db.patch(id, { parentId: target, updatedAt: now });
     await adjustFolderTotals(ctx, target, folder.fileCount, folder.totalBytes);
-    all.set(id, { ...folder, parentId: target });
+    all.set(id, { ...folder, parentId: target }); open.set(id, { ...folder, parentId: target });
   }
   const left = new Map<Id<'storageFolders'>, { files: number; bytes: number }>();
   let files = 0, bytes = 0;
   for (const id of fileIds) {
     const row = await ctx.db.get(id);
     if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) throw new ConvexError('File not found');
+    if (row.archivedAt !== undefined) throw new ConvexError(`${row.fileName} is archived. Restore it first.`);
     if (row.folderId === target) continue;
     if (row.folderId) { const from = left.get(row.folderId) ?? { files: 0, bytes: 0 }; from.files++; from.bytes += row.size; left.set(row.folderId, from); }
     await ctx.db.patch(id, { folderId: target });
@@ -271,8 +288,8 @@ export const settleLinkImport = internalMutation({ args: { taskId: v.id('mediaTa
       ...(asset.duration !== undefined ? { duration: asset.duration } : {}), ...(asset.width !== undefined ? { width: asset.width } : {}), ...(asset.height !== undefined ? { height: asset.height } : {}),
       createdAt: now, activeAt: now, expiresAt: now, completed: true, direct: true }));
   const file = await ctx.db.query('storageObjects').withIndex('by_owner_key', q => q.eq('ownerId', ownerId).eq('objectKey', `r2:${r2Key}`)).unique();
-  const target = await liveFolderId(ctx, ownerId, row.folderId);
-  if (file && !file.pending && !file.auxiliary && file.folderId !== target) {
+  const target = await openFolderId(ctx, ownerId, row.folderId);
+  if (file && !file.pending && !file.auxiliary && file.archivedAt === undefined && file.folderId !== target) {
     await adjustFolderTotals(ctx, file.folderId, -1, -file.size);
     await ctx.db.patch(file._id, { folderId: target });
     await adjustFolderTotals(ctx, target, 1, file.size);
@@ -284,11 +301,13 @@ export const settleLinkImport = internalMutation({ args: { taskId: v.id('mediaTa
  * already include them, so no total changes. */
 async function drainFiles(ctx: MutationCtx, folder: Folder) {
   let budget = DRAIN_BATCH;
-  const parentId = await liveFolderId(ctx, folder.ownerId, folder.parentId);
+  const parentId = await liveFolderId(ctx, folder.ownerId, folder.parentId), parent = parentId ? await ctx.db.get(parentId) : null;
+  // A parent archived meanwhile takes the files archived with it.
+  const archived = parent?.archivedAt !== undefined ? { archivedAt: parent.archivedAt, archivedWith: parent.archivedWith ?? parent._id } : null;
   // Unfinished uploads move too, so they finish in the parent.
   for (const pending of [false, true]) {
     const rows = await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', folder.ownerId).eq('auxiliary', false).eq('pending', pending).eq('folderId', folder._id)).take(budget + 1);
-    for (const row of rows.slice(0, budget)) await ctx.db.patch(row._id, { folderId: parentId });
+    for (const row of rows.slice(0, budget)) await ctx.db.patch(row._id, archived && row.archivedAt === undefined ? { folderId: parentId, ...archived } : { folderId: parentId });
     if (rows.length > budget) return false;
     budget -= rows.length;
   }
@@ -305,12 +324,13 @@ export const drainFolder = internalMutation({ args: { folderId }, returns: v.nul
  * deleted. A subfolder whose name is taken there gets a number added. */
 export const removeFolder = mutation({ args: { folderId }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), folder = await ownedFolder(ctx, ownerId, args.folderId), now = Date.now();
-  const names = siblingNames(await ownerFolders(ctx, ownerId), folder.parentId, folder._id);
-  // A subfolder still handing its files up (being deleted itself) moves too, so those files keep a live parent.
+  const names = siblingNames(openFolders(await ownerFolders(ctx, ownerId)), folder.parentId, folder._id);
+  // A subfolder still handing its files up (being deleted itself) moves too, so those files keep a live parent. An
+  // archived subfolder keeps its name: it gets a free one when it is restored.
   const children = await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', folder._id)).take(MAX_FOLDERS + 100);
   for (const child of children) {
-    const name = child.deleting ? child.name : freeName(names, child.name);
-    if (!child.deleting) names.push(name);
+    const keeps = child.deleting || child.archivedAt !== undefined, name = keeps ? child.name : freeName(names, child.name);
+    if (!keeps) names.push(name);
     await ctx.db.patch(child._id, { parentId: folder.parentId, name, updatedAt: now });
   }
   if (await drainFiles(ctx, folder)) await ctx.db.delete(folder._id);
@@ -323,9 +343,11 @@ export const removeFolder = mutation({ args: { folderId }, returns: v.null(), ha
 
 // ── Files ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-async function ownedFile(ctx: QueryCtx | MutationCtx, ownerId: string, fileId: Id<'storageObjects'>) {
+/** One of the owner's listed files. An archived one is not found unless `archived` allows it. */
+async function ownedFile(ctx: QueryCtx | MutationCtx, ownerId: string, fileId: Id<'storageObjects'>, archived = false) {
   const row = await ctx.db.get(fileId);
   if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) throw new ConvexError('File not found');
+  if (!archived && row.archivedAt !== undefined) throw new ConvexError(`${row.fileName} is archived. Restore it first.`);
   return row;
 }
 /** Renames the Library entry. The file keeps its extension: it is added back when the new name does not end with it.
@@ -340,7 +362,7 @@ export const renameFile = mutation({ args: { fileId: v.id('storageObjects'), nam
   return name;
 } });
 export const downloadSource = internalQuery({ args: { fileId: v.id('storageObjects') }, returns: v.object({ r2Key: v.optional(v.string()), storageId: v.optional(v.id('_storage')), fileName: v.string() }), handler: async (ctx, args) => {
-  const row = await ownedFile(ctx, await requireOwner(ctx), args.fileId);
+  const row = await ownedFile(ctx, await requireOwner(ctx), args.fileId, true);
   return { ...(row.r2Key ? { r2Key: row.r2Key } : {}), ...(row.storageId ? { storageId: row.storageId } : {}), fileName: row.fileName };
 } });
 /** A download link for one stored file, signed for 15 minutes. */
@@ -430,3 +452,148 @@ export const addToProject = mutation({ args: { fileIds: v.array(v.id('storageObj
   }
   return { added, existing };
 } });
+
+// ── Archive ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Archiving only declutters: an archived file stays stored where it was and still counts toward storage. It leaves
+// the Library's folders and search, the editor's media picker and Add to project; projects that use it keep working.
+
+const selection = { fileIds: v.array(v.id('storageObjects')), folderIds: v.array(folderId) };
+/** The page selects up to 20 files; a folder is archived from its own menu. */
+function chosen(args: { fileIds: Id<'storageObjects'>[]; folderIds: Id<'storageFolders'>[] }, verb: string) {
+  const fileIds = [...new Set(args.fileIds)], folderIds = [...new Set(args.folderIds)];
+  if (!fileIds.length && !folderIds.length) throw new ConvexError(`Choose what to ${verb}`);
+  if (fileIds.length > 20 || folderIds.length > 20) throw new ConvexError(`${verb[0].toUpperCase()}${verb.slice(1)} up to 20 files and 20 folders at a time`);
+  return { fileIds, folderIds };
+}
+/** Writes one archive or restore call makes before handing the rest of a large folder to scheduled batches. */
+type Budget = { left: number };
+/** A folder and every open folder below it, from a parent → children map built once. */
+function openSubtree(all: Map<Id<'storageFolders'>, Folder>, rootId: Id<'storageFolders'>) {
+  const children = new Map<string, Folder[]>();
+  for (const folder of all.values()) if (folder.parentId) children.set(folder.parentId, [...children.get(folder.parentId) ?? [], folder]);
+  const found: Folder[] = [];
+  for (let queue = children.get(rootId) ?? []; queue.length;) {
+    const next: Folder[] = [];
+    for (const folder of queue) if (folder.archivedAt === undefined && !found.includes(folder)) { found.push(folder); next.push(...children.get(folder._id) ?? []); }
+    queue = next;
+  }
+  return found;
+}
+/** Marks files of an archived folder's subtree as archived with it, within `budget`. True when none are left. */
+async function archiveFolderBatch(ctx: MutationCtx, root: Folder, at: number, budget: Budget, all?: Map<Id<'storageFolders'>, Folder>) {
+  const folders = all ?? await ownerFolders(ctx, root.ownerId);
+  const inside = [root._id, ...[...folders.values()].filter(folder => folder.archivedWith === root._id).map(folder => folder._id)];
+  for (const id of inside) for (const pending of [false, true]) {
+    // Unfinished uploads go too, so they finish archived with the folder.
+    const rows = await ctx.db.query('storageObjects').withIndex('by_owner_folder_archived_created', q => q.eq('ownerId', root.ownerId).eq('auxiliary', false).eq('pending', pending).eq('folderId', id).eq('archivedAt', undefined)).take(budget.left + 1);
+    for (const row of rows.slice(0, budget.left)) await ctx.db.patch(row._id, { archivedAt: at, archivedWith: root._id });
+    if (rows.length > budget.left) { budget.left = 0; return false; }
+    budget.left -= rows.length;
+  }
+  return true;
+}
+/** Returns files archived with a folder to the Library, within `budget`. True when none are left. */
+async function restoreFolderBatch(ctx: MutationCtx, ownerId: string, rootId: Id<'storageFolders'>, budget: Budget) {
+  for (const pending of [false, true]) {
+    const rows = await ctx.db.query('storageObjects').withIndex('by_owner_archived_with', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', pending).eq('archivedWith', rootId)).take(budget.left + 1);
+    for (const row of rows.slice(0, budget.left)) await ctx.db.patch(row._id, { archivedAt: undefined, archivedWith: undefined });
+    if (rows.length > budget.left) { budget.left = 0; return false; }
+    budget.left -= rows.length;
+  }
+  return true;
+}
+/** Continues a folder archive. Stops when the folder was restored (or archived again) meanwhile. */
+export const archiveFolderFiles = internalMutation({ args: { folderId, at: v.number() }, returns: v.null(), handler: async (ctx, args) => {
+  const folder = await ctx.db.get(args.folderId);
+  if (!folder || folder.archivedAt !== args.at || folder.archivedWith) return null;
+  if (!await archiveFolderBatch(ctx, folder, args.at, { left: DRAIN_BATCH })) await ctx.scheduler.runAfter(0, internal.library.archiveFolderFiles, args);
+  return null;
+} });
+/** Continues a folder restore. Stops when the folder was archived again meanwhile; a folder deleted meanwhile still
+ * gets its files back, so none stay archived with a folder that is gone. */
+export const restoreFolderFiles = internalMutation({ args: { ownerId: v.string(), folderId }, returns: v.null(), handler: async (ctx, args) => {
+  if ((await ctx.db.get(args.folderId))?.archivedAt !== undefined) return null;
+  if (!await restoreFolderBatch(ctx, args.ownerId, args.folderId, { left: DRAIN_BATCH })) await ctx.scheduler.runAfter(0, internal.library.restoreFolderFiles, args);
+  return null;
+} });
+/** Levels a folder holds, counting itself, from its deepest descendant. */
+function folderHeight(all: Map<Id<'storageFolders'>, Folder>, id: Id<'storageFolders'>) {
+  return Math.max(1, ...[...all.values()].map(folder => lineage(all, folder._id).findIndex(step => step._id === id) + 1));
+}
+
+/** Archives files and folders. A folder takes everything in it, subfolders included; a large one finishes in
+ * scheduled batches. Already archived items are left as they are. */
+export const archive = mutation({ args: selection, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), { fileIds, folderIds } = chosen(args, 'archive'), now = Date.now(), budget = { left: DRAIN_BATCH };
+  const all = folderIds.length ? await ownerFolders(ctx, ownerId) : new Map<Id<'storageFolders'>, Folder>();
+  for (const id of folderIds) {
+    const known = all.get(id), folder = known && await ctx.db.get(id);
+    if (!folder || folder.ownerId !== ownerId || folder.deleting) throw new ConvexError('Folder not found');
+    if (folder.archivedAt !== undefined || known!.archivedAt !== undefined) continue;
+    await ctx.db.patch(folder._id, { archivedAt: now });
+    all.set(folder._id, { ...folder, archivedAt: now });
+    // The folders above stop counting its files; its own totals travel with it.
+    await adjustFolderTotals(ctx, folder.parentId, -folder.fileCount, -folder.totalBytes);
+    for (const inner of openSubtree(all, folder._id)) {
+      await ctx.db.patch(inner._id, { archivedAt: now, archivedWith: folder._id });
+      all.set(inner._id, { ...inner, archivedAt: now, archivedWith: folder._id });
+    }
+    if (!await archiveFolderBatch(ctx, { ...folder, archivedAt: now }, now, budget, all)) await ctx.scheduler.runAfter(0, internal.library.archiveFolderFiles, { folderId: folder._id, at: now });
+  }
+  for (const id of fileIds) {
+    const row = await ownedFile(ctx, ownerId, id, true);
+    if (row.archivedAt !== undefined) continue;
+    // A file in a folder archived above goes with that folder.
+    if (row.folderId && (await ctx.db.get(row.folderId))?.archivedAt !== undefined) continue;
+    await ctx.db.patch(row._id, { archivedAt: now });
+    await adjustFolderTotals(ctx, row.folderId, -1, -row.size);
+  }
+  return null;
+} });
+/** Returns archived files and folders to the Library: each to the folder it left, or the nearest open folder above
+ * that one (the root when none is). A folder brings back everything archived with it and takes a free name. */
+export const restore = mutation({ args: selection, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), { fileIds, folderIds } = chosen(args, 'restore'), now = Date.now(), budget = { left: DRAIN_BATCH };
+  const all = folderIds.length ? await ownerFolders(ctx, ownerId) : new Map<Id<'storageFolders'>, Folder>();
+  for (const id of folderIds) {
+    const folder = all.get(id);
+    if (!folder || folder.ownerId !== ownerId) throw new ConvexError('Folder not found');
+    if (folder.archivedAt === undefined) continue;
+    if (folder.archivedWith) throw new ConvexError(`“${folder.name}” was archived with the folder that holds it. Restore that folder.`);
+    let parentId = await openFolderId(ctx, ownerId, folder.parentId);
+    // Too deep where it would land (its folder moved meanwhile): it returns at the root.
+    if (lineage(all, parentId).length + folderHeight(all, folder._id) > MAX_FOLDER_DEPTH) parentId = undefined;
+    const name = freeName(siblingNames(openFolders(all), parentId), folder.name);
+    await ctx.db.patch(folder._id, { archivedAt: undefined, parentId, name, updatedAt: now });
+    all.set(folder._id, { ...folder, archivedAt: undefined, parentId, name });
+    for (const inner of all.values()) if (inner.archivedWith === folder._id) { await ctx.db.patch(inner._id, { archivedAt: undefined, archivedWith: undefined }); all.set(inner._id, { ...inner, archivedAt: undefined, archivedWith: undefined }); }
+    await adjustFolderTotals(ctx, parentId, folder.fileCount, folder.totalBytes);
+    if (!await restoreFolderBatch(ctx, ownerId, folder._id, budget)) await ctx.scheduler.runAfter(0, internal.library.restoreFolderFiles, { ownerId, folderId: folder._id });
+  }
+  for (const id of fileIds) {
+    const row = await ownedFile(ctx, ownerId, id, true);
+    if (row.archivedAt === undefined) continue;
+    if (row.archivedWith) throw new ConvexError(`${row.fileName} was archived with its folder. Restore that folder.`);
+    const target = await openFolderId(ctx, ownerId, row.folderId);
+    await ctx.db.patch(row._id, { archivedAt: undefined, folderId: target });
+    await adjustFolderTotals(ctx, target, 1, row.size);
+  }
+  return null;
+} });
+
+/** Folders archived on their own, most recently archived first, with their totals and up to three thumbnails. */
+export const archivedFolders = query({ args: {}, returns: v.array(v.object({ ...folderSummary, archivedAt: v.number(), thumbnails: v.array(tileThumbnailValue) })), handler: async ctx => {
+  const roots = [...(await ownerFolders(ctx, await requireOwner(ctx))).values()].filter(archiveRoot).sort((a, b) => b.archivedAt! - a.archivedAt!);
+  return Promise.all(roots.map(async (folder, index) => ({ ...summarize(folder), archivedAt: folder.archivedAt!,
+    thumbnails: folder.fileCount && index < THUMBNAIL_FOLDERS ? await folderThumbnails(ctx, folder, true) : [] })));
+} });
+/** Files archived on their own, most recently archived first. Files archived with a folder are under that folder. */
+export const archivedFiles = query({ args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({ page: v.array(v.object({ ...libraryItem.fields, archivedAt: v.number() })), isDone: v.boolean(), continueCursor: v.string(), splitCursor: v.optional(v.union(v.string(), v.null())), pageStatus: v.optional(v.union(v.literal('SplitRecommended'), v.literal('SplitRequired'), v.null())) }),
+  handler: async (ctx, args) => {
+    const ownerId = await requireOwner(ctx);
+    if (args.paginationOpts.numItems < 1 || args.paginationOpts.numItems > 40) throw new ConvexError('Load up to 40 files');
+    const page = await ctx.db.query('storageObjects').withIndex('by_owner_archived_with', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('archivedWith', undefined).gte('archivedAt', 0)).order('desc').paginate(args.paginationOpts);
+    const reads = listingReads(ctx);
+    return { ...page, page: await Promise.all(page.page.map(async row => ({ ...await listItem(ctx, row, reads), archivedAt: row.archivedAt! }))) };
+  } });

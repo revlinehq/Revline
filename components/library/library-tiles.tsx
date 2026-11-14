@@ -69,32 +69,53 @@ export function RenameInput({ value, label, onSubmit, onCancel }: { value: strin
     onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } }} />;
 }
 
-export function FolderMenu({ name, onRename, onMove, onDelete }: { name: string; onRename: () => void; onMove: () => void; onDelete: () => void }) {
+export function FolderMenu({ name, onRename, onMove, onArchive, onDelete }: { name: string; onRename: () => void; onMove: () => void; onArchive: () => void; onDelete: () => void }) {
   return <DropdownMenu>
     <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="library-folder-more" aria-label={`More for ${name}`}><Ellipsis /></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="dash-menu">
       <DropdownMenuItem onSelect={onRename}>Rename</DropdownMenuItem>
       <DropdownMenuItem onSelect={onMove}>Move to</DropdownMenuItem>
+      <DropdownMenuItem onSelect={onArchive}>Archive</DropdownMenuItem>
       <DropdownMenuItem onSelect={onDelete}>Delete folder</DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>;
+}
+/** An archived folder's menu: it only comes back. */
+export function ArchivedFolderMenu({ name, onRestore }: { name: string; onRestore: () => void }) {
+  return <DropdownMenu>
+    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="library-folder-more" aria-label={`More for ${name}`}><Ellipsis /></Button></DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="dash-menu">
+      <DropdownMenuItem onSelect={onRestore}>Restore</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>;
 }
 
 type FolderProps = { folder: LibraryFolder; renaming: boolean; onRename: (name: string) => void; onRenameEnd: () => void; menu: ReactNode; onDropItems: (payload: DragPayload) => void; onDropFiles: (files: File[]) => void; onWarm?: () => void; onCool?: () => void };
+/** An archived folder in the Archived view: its picture, name and totals, and a menu to restore it. It does not open
+ *  and takes no drops. */
+export function ArchivedFolderTile({ folder, menu }: { folder: LibraryFolder; menu: ReactNode }) {
+  return <div className="library-folder" data-archived="">
+    <div className="library-folder-link"><FolderBody folder={folder} name={<strong title={folder.name}>{folder.name}</strong>} /></div>
+    {menu}
+  </div>;
+}
+function FolderBody({ folder, name }: { folder: LibraryFolder; name: ReactNode }) {
+  const thumbnails = folder.thumbnails ?? [], blanks = Math.max(0, Math.min(3, folder.fileCount) - thumbnails.length);
+  return <>
+    <span className="library-folder-top">
+      <Folder className="library-folder-icon" aria-hidden="true" />
+      <span className="library-folder-stack" aria-hidden="true">{thumbnails.map(({ url, video }) => video ? <VideoFrame key={url} src={url} /> : <img key={url} src={url} alt="" loading="lazy" decoding="async" draggable={false} />)}{Array.from({ length: blanks }, (_, index) => <i key={index} />)}</span>
+    </span>
+    {name}
+    <small>{folderMeta(folder)}</small>
+  </>;
+}
 const dragFolder = (folder: LibraryFolder) => (event: DragEvent) => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify({ files: [], folders: [folder.id] } satisfies DragPayload)); event.dataTransfer.effectAllowed = 'move'; };
 export const folderMeta = (folder: LibraryFolder) => folder.fileCount ? `${plural(folder.fileCount, 'item')} · ${formatBytes(folder.totalBytes)}` : '0 items';
 
 export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDropItems, onDropFiles, onWarm, onCool }: FolderProps) {
   const { over, handlers } = useDropTarget(onDropItems, onDropFiles);
-  const thumbnails = folder.thumbnails ?? [], blanks = Math.max(0, Math.min(3, folder.fileCount) - thumbnails.length);
-  const body = <>
-    <span className="library-folder-top">
-      <Folder className="library-folder-icon" aria-hidden="true" />
-      <span className="library-folder-stack" aria-hidden="true">{thumbnails.map(({ url, video }) => video ? <VideoFrame key={url} src={url} /> : <img key={url} src={url} alt="" loading="lazy" decoding="async" draggable={false} />)}{Array.from({ length: blanks }, (_, index) => <i key={index} />)}</span>
-    </span>
-    {renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <strong title={folder.name}>{folder.name}</strong>}
-    <small>{folderMeta(folder)}</small>
-  </>;
+  const body = <FolderBody folder={folder} name={renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <strong title={folder.name}>{folder.name}</strong>} />;
   return <div className="library-folder" data-drop={over || undefined} draggable={!renaming} onDragStart={dragFolder(folder)} onPointerEnter={onWarm} onPointerLeave={onCool} onFocus={onWarm} onBlur={onCool} {...handlers}>
     {renaming ? <div className="library-folder-link">{body}</div> : <Link href={folderHref(folder.id)} className="library-folder-link" draggable={false} onClick={openFolderLink(folder.id)}>{body}</Link>}
     {!renaming && menu}
@@ -114,11 +135,12 @@ export function FileThumb({ file, badge = true, onImageSize }: { file: LibraryFi
 }
 export const usedIn = (file: LibraryFile) => file.workspaces.length ? `In ${plural(file.workspaces.length, 'project')}` : '';
 
-type FileProps = { file: LibraryFile; selected: boolean; active: boolean; onOpen: (additive: boolean) => void; onToggle: () => void; dragPayload: () => DragPayload };
+/** `dragPayload` is absent where files cannot be dragged (the Archived view). */
+type FileProps = { file: LibraryFile; selected: boolean; active: boolean; onOpen: (additive: boolean) => void; onToggle: () => void; dragPayload?: () => DragPayload };
 export function FileTile({ file, selected, active, onOpen, onToggle, dragPayload }: FileProps) {
   const hover = useHoverVideo(file.id, file.kind === 'video' || file.kind === 'export', file.videoUrl);
-  return <div className="library-file" data-selected={selected || undefined} data-active={active || undefined} draggable {...hover.handlers}
-    onDragStart={event => { hover.stop(); event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload())); event.dataTransfer.effectAllowed = 'move'; }}>
+  return <div className="library-file" data-selected={selected || undefined} data-active={active || undefined} draggable={!!dragPayload} {...hover.handlers}
+    onDragStart={dragPayload && (event => { hover.stop(); event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload())); event.dataTransfer.effectAllowed = 'move'; })}>
     <Button variant="ghost" className="library-file-hit" aria-label={`Details for ${file.fileName}`} aria-pressed={active} onClick={event => onOpen(event.metaKey || event.ctrlKey || event.shiftKey)}>
       <span className="library-file-media"><FileThumb file={file} />{hover.video}</span>
       <strong title={file.fileName}>{file.fileName}</strong>

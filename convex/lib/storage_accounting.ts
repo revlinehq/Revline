@@ -5,7 +5,7 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
 import { hiddenFromLibrary } from '../../lib/editor/library-visibility';
-import { adjustFolderTotals, liveFolderId } from './storage_folders';
+import { adjustFolderTotals, countsInFolder, liveFolderId, openFolderId } from './storage_folders';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
 type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:Doc<'storageObjects'>['kind']; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'>; folderId?:Id<'storageFolders'> };
@@ -36,17 +36,19 @@ export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails) 
   const pending=source.pending??false, auxiliary=source.auxiliary??false;
   if(existing&&!existing.pending)return;
   if(existing)await adjust(ctx,source.ownerId,existing,-1);
-  // An upload keeps the Library folder it was started in; a folder deleted meanwhile hands it to its parent.
+  // An upload keeps the Library folder it was started in; a folder deleted meanwhile hands it to its parent. One
+  // archived meanwhile took the upload with it, so it finishes archived there.
   const folderId=auxiliary?undefined:await liveFolderId(ctx,source.ownerId,existing?existing.folderId:source.folderId);
-  const next={ownerId:source.ownerId,fileName:source.fileName,kind:source.kind,size:source.size,createdAt:source.createdAt,objectKey:key,pending,auxiliary,...(source.r2Key?{r2Key:source.r2Key}:{}),...(source.storageId?{storageId:source.storageId}:{}),...(source.jobId?{jobId:source.jobId}:{}),...(folderId?{folderId}:{})};
+  const archived=!auxiliary&&existing?.archivedAt!==undefined?{archivedAt:existing.archivedAt,...(existing.archivedWith?{archivedWith:existing.archivedWith}:{})}:{};
+  const next={ownerId:source.ownerId,fileName:source.fileName,kind:source.kind,size:source.size,createdAt:source.createdAt,objectKey:key,pending,auxiliary,...(source.r2Key?{r2Key:source.r2Key}:{}),...(source.storageId?{storageId:source.storageId}:{}),...(source.jobId?{jobId:source.jobId}:{}),...(folderId?{folderId}:{}),...archived};
   if(existing)await ctx.db.replace(existing._id,next);else await ctx.db.insert('storageObjects',next);
   await adjust(ctx,source.ownerId,next,1);
-  if(!pending)await adjustFolderTotals(ctx,folderId,1,next.size);
+  if(countsInFolder(next))await adjustFolderTotals(ctx,folderId,1,next.size);
 }
 export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:StoredObject) {
   const key=objectKey(source);if(!key)return;
   const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
-  if(row){await adjust(ctx,ownerId,row,-1);if(!row.pending&&!row.auxiliary)await adjustFolderTotals(ctx,row.folderId,-1,-row.size);await ctx.db.delete(row._id);}
+  if(row){await adjust(ctx,ownerId,row,-1);if(countsInFolder(row))await adjustFolderTotals(ctx,row.folderId,-1,-row.size);await ctx.db.delete(row._id);}
 }
 /** Lists or unlists an already recorded file in the Library. Its bytes stay counted either way; only the file count
  *  and folder totals follow what is listed. A hidden file remembers its folder and returns to it when listed again. */
@@ -55,9 +57,11 @@ export async function setStorageObjectListed(ctx:MutationCtx,ownerId:string,sour
   const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
   if(!row||row.pending||row.auxiliary===!listed)return;
   await adjust(ctx,ownerId,row,-1);
-  if(!listed)await adjustFolderTotals(ctx,row.folderId,-1,-row.size);
-  const folderId=listed?await liveFolderId(ctx,ownerId,row.folderId):row.folderId;
-  await ctx.db.patch(row._id,{auxiliary:!listed,folderId});
+  if(!listed&&countsInFolder(row))await adjustFolderTotals(ctx,row.folderId,-1,-row.size);
+  // A file listed again returns to its folder, or the nearest open one when that folder is archived or gone.
+  const folderId=listed?await openFolderId(ctx,ownerId,row.folderId):row.folderId;
+  // A hidden file leaves any archive: it returns to an open folder when listed again.
+  await ctx.db.patch(row._id,listed?{auxiliary:false,folderId}:{auxiliary:true,folderId,archivedAt:undefined,archivedWith:undefined});
   await adjust(ctx,ownerId,{...row,auxiliary:!listed},1);
   if(listed)await adjustFolderTotals(ctx,folderId,1,row.size);
 }

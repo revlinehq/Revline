@@ -405,14 +405,28 @@ export default defineSchema({
     thumbnailStorageId:v.optional(v.id('_storage')) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
   storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:storageObjectKind, size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')),
     /** The Library folder holding this file; absent at the root. */
-    folderId:v.optional(v.id('storageFolders')) })
+    folderId:v.optional(v.id('storageFolders')),
+    /** When the file was archived: hidden from the Library, its search, the media picker and Add to project, still
+     * stored and counted. Projects that use it keep working. Absent on a file that is not archived. */
+    archivedAt:v.optional(v.number()),
+    /** The archived folder this file went with (it restores with that folder). Absent on a file archived on its own. */
+    archivedWith:v.optional(v.id('storageFolders')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
     .index('by_owner_folder_created',['ownerId','auxiliary','pending','folderId','createdAt']).index('by_owner_folder_size',['ownerId','auxiliary','pending','folderId','size'])
-    .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
+    .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']})
+    // The Library's own listings: files that are not archived (`archivedAt` absent), and the Archived view.
+    .index('by_owner_folder_archived_created',['ownerId','auxiliary','pending','folderId','archivedAt','createdAt']).index('by_owner_folder_archived_size',['ownerId','auxiliary','pending','folderId','archivedAt','size'])
+    .index('by_owner_archived_with',['ownerId','auxiliary','pending','archivedWith','archivedAt'])
+    .searchIndex('search_live_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','archivedAt']}),
   /** Library folders. `fileCount` and `totalBytes` cover the whole subtree (finished, visible files only) and are
-   * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
-  storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()) })
+   * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents.
+   * An archived folder's totals stop at it: the folders above it count none of its files. */
+  storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()),
+    /** When the folder was archived, with everything in it. Absent on a folder that is not archived. */
+    archivedAt:v.optional(v.number()),
+    /** The archived folder above this one that it went with. Absent on a folder archived on its own (shown in the Archived view). */
+    archivedWith:v.optional(v.id('storageFolders')) })
     .index('by_owner_parent',['ownerId','parentId']),
   /** Video links imported from the Library. Each runs as a `sourcesOnly` import in a holding project of its own; when it
    * ends, `library.settleLinkImport` keeps the video as a Library file in `folderId` and removes the holder. */
