@@ -9,3 +9,4 @@
 .post-confirm-actions{display:flex;gap:8px}
 .post-confirm-card [data-error]{color:var(--destructive)}
 .post-confirm-card a{text-decoration:underline}
+.post-confirm-card dl>div.post-confirm-picker{display:block}

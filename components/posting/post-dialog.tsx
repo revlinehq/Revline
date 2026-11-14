@@ -6,19 +6,18 @@ import { CalendarDays, Pencil, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CAPTION_LIMIT, POSTING_NOT_SET_UP, TITLE_LIMIT } from '@/lib/posting/limits';
-import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { YOUTUBE_VISIBILITY_NOTE } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { AccountAvatar, PlatformIcon } from './account-avatar';
+import { PlatformIcon } from './account-avatar';
+import { AccountPicker } from './account-picker';
 import { localInputValue, postTime } from './post-time';
 import { NO_TIKTOK_CHOICE, TikTokConsent, TikTokPostSettings, tiktokProblem, tiktokTarget, type TikTokChoice, type TikTokCreator } from './tiktok-post-settings';
 import './posting.css';
@@ -145,21 +144,10 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, o
             </div>
           </Card>
           <div className="post-accounts">
-            <div className="post-accounts-head"><h3>Accounts</h3><span>{picked.length} selected</span></div>
-            {!platforms || !accounts ? <p className="post-note" role="status">Loading your accounts…</p> : platforms.map(entry => {
-              const own = accounts.filter(account => account.platform === entry.platform);
-              return <div key={entry.platform} className="post-platform">
-                <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span></div>
-                {own.map(account => {
-                  const expired = account.status !== 'connected', disabled = expired || !entry.live;
-                  return <label key={account.id} className="post-account" data-disabled={disabled || undefined}>
-                    <Checkbox disabled={disabled} checked={!disabled && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Reconnect needed</small>}
-                  </label>;
-                })}
-                {!own.length && <p className="post-note">No accounts connected yet.</p>}
-              </div>;
-            })}
+            <div className="post-accounts-head"><h3>Post to</h3></div>
+            {!platforms || !accounts ? <p className="post-note" role="status">Loading your accounts…</p>
+              : accounts.length ? <AccountPicker accounts={accounts} usable={account => account.status === 'connected' && live.has(account.platform)} chosen={chosen} onChange={setChosen} disabled={busy} />
+              : <p className="post-note">No accounts connected yet.</p>}
             {platforms && accounts && live.size > 0 && !usable.length && <Button asChild variant="soft" size="sm" className="post-connect"><Link href="/accounts">Connect an account</Link></Button>}
           </div>
         </div>

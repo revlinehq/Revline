@@ -1,0 +1,1 @@
+- Posting: account groups. Name a set of accounts across platforms on Connected accounts, star one as default, and pick it in the Post dialog, the editor's Post menu and the assistant's confirmation card; accounts that need reconnecting are skipped, not blocking. Why: the founder asked to post to the same accounts in one click.
