@@ -107,14 +107,15 @@ export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{sta
   for(const other of overlapping){
     const otherEnd=other.start+other.duration,from={start:round(other.start),end:round(otherEnd)},said=wordsInside(other.text??'',text);
     // What is left of the neighbour before and after the new range.
-    const before=Math.max(0,start-other.start),after=Math.max(0,otherEnd-end);
-    if(before>=frame-1e-7&&after>=frame-1e-7)throw new Error(`The new range sits inside ${name(other)}, which would have to be split. Retime that caption first, or choose a range that starts or ends outside it.`);
-    if(before<frame-1e-7&&after<frame-1e-7||said&&Math.max(before,after)<other.duration/2){
+    // A leftover shorter than a frame and a half is no caption: it counts as covered (the server refuses under one frame).
+    const before=Math.max(0,start-other.start),after=Math.max(0,otherEnd-end),keep=frame*1.5;
+    if(before>=keep&&after>=keep)throw new Error(`The new range sits inside ${name(other)}, which would have to be split. Retime that caption first, or choose a range that starts or ends outside it.`);
+    if(before<keep&&after<keep||said&&Math.max(before,after)<other.duration/2){
       // Covered, or mostly covered by a caption that now says its words: it goes. Words this caption does not say never go.
       if(!said)throw new Error(`The new range covers ${name(other)}, and this caption's text does not include its words, so removing it would lose them. Put its words into this caption with editText first, or retime that caption.`);
       neighbours.push({clipId:other.id,text:other.text??'',action:'removed',from,reason:'its words are in the retimed caption'});replaced.set(other.id,null);continue;
     }
-    if(before>=frame-1e-7){
+    if(before>=keep){
       // The neighbour runs into the new range from the left: its end comes back to the new start.
       const next={...other,duration:start-other.start};validateClipEffects(next);replaced.set(other.id,next);
       neighbours.push({clipId:other.id,text:other.text??'',action:'trimmed',from,to:{start:round(next.start),end:round(start)},reason:'its end overlapped the retimed caption'});
