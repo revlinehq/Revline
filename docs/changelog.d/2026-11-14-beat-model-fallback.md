@@ -1,0 +1,1 @@
+- Media processor: the Beat This model download falls back to a commit-pinned Hugging Face copy (or `BEAT_MODEL_URL`) with the same SHA-256, and an image build continues without it; the worker installs it on the first beat task. Why: the JKU model host returned HTTP 500 and blocked every processor image build and the production release.

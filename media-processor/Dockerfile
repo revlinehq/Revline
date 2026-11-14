@@ -66,13 +66,16 @@ COPY lib ./lib
 COPY scripts ./scripts
 COPY public ./public
 COPY media-processor ./media-processor
-RUN node scripts/install-beat-model.mjs \
+# The model host can be down; the build then continues and the worker installs
+# the same pinned checkpoint on its first beat task (hence the writable folder).
+RUN node scripts/install-beat-model.mjs --optional \
     && node scripts/copy-vendor.mjs \
     && node media-processor/runtime-check.mjs
 
 # Installed Chromium is read-only at runtime. Re-owning it here would copy
 # another ~698 MB into every image after an application-code change.
-RUN mkdir -p /tmp/revline && chown node:node /tmp/revline
+RUN mkdir -p /tmp/revline "$(dirname "$BEAT_TRACK_MODEL_PATH")" \
+    && chown node:node /tmp/revline "$(dirname "$BEAT_TRACK_MODEL_PATH")"
 USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM

@@ -25,7 +25,8 @@ if (!exportsOnly) {
   execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
   execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', "import sys, scenedetect, cv2; sys.path.insert(0, 'scripts'); from source_frames import SourceFrames; assert hasattr(cv2, 'calcOpticalFlowPyrLK') and hasattr(cv2, 'estimateAffinePartial2D') and hasattr(cv2, 'matchTemplate') and hasattr(cv2, 'findTransformECC')"], { stdio: 'inherit' });
   execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
-  if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
+  // A missing model is fetched on the first beat task; a corrupt one fails the build.
+  execFileSync(process.execPath, ['scripts/install-beat-model.mjs', '--verify'], { stdio: 'inherit' });
 }
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');
 for (const path of ['public/vendor/text-runtime.js', 'public/vendor/transitions-runtime.js', 'public/vendor/visual-effects.js', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
@@ -37,4 +38,4 @@ try {
   await page.setContent('<p>Media runtime check</p>');
   if (await page.$eval('p', element => element.textContent) !== 'Media runtime check') throw new Error('Chromium could not render.');
 } finally { await browser.close(); }
-console.log(exportsOnly ? 'Export runtime: server imports, retry policy, FFmpeg, Chromium and export assets verified.' : 'Media runtime: server imports, retry policy, FFmpeg, Python trackers, pinned model, Chromium and export assets verified.');
+console.log(exportsOnly ? 'Export runtime: server imports, retry policy, FFmpeg, Chromium and export assets verified.' : 'Media runtime: server imports, retry policy, FFmpeg, Python trackers, beat model, Chromium and export assets verified.');
