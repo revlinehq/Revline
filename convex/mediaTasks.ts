@@ -258,7 +258,7 @@ export const progressForProject=query({args:{projectId:v.id('projects')},returns
  * yields to another owner's queued work. Bounded: one scan plus one small
  * indexed read per distinct owner; with no other owner waiting, the oldest
  * task is claimed so a lone account still uses every free slot. */
-async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) {
+async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[],claimsExtract=true) {
   // A video upload already prepares its audio. Do not occupy another worker
   // demuxing that same video while its bounded extraction task is still active.
   const ready: Doc<'mediaTasks'>[] = [];
@@ -269,6 +269,15 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
         const preparations = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', task.assetId!).eq('kind', 'extract')).order('desc').take(10);
         if (preparations.some(p => p.ownerId === task.ownerId && p.projectId === task.projectId && ['queued', 'running', 'retrying'].includes(p.status))) continue;
       }
+    }
+    // An upload enqueues its audio and its playback preview together, and either workflow can make its task claimable
+    // first. A preview claimed in that moment held the only free slot for its whole download and transcode while the
+    // audio the editor waits on (seconds of work) stayed queued. Yield only while that audio task is still being
+    // prepared; once it is claimable it goes first, and once claimed the preview may run alongside it. A worker that
+    // declines audio work does not wait for it.
+    if (claimsExtract && task.kind === 'preview' && task.assetId) {
+      const preparations = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', task.assetId!).eq('kind', 'extract')).order('desc').take(3);
+      if (preparations.some(p => p.ownerId === task.ownerId && p.projectId === task.projectId && p.status === 'queued' && p.claimable === false && p.attempt === 0)) continue;
     }
     ready.push(task);
   }
@@ -308,17 +317,20 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return skipRenders?q.and(base,q.neq(q.field('kind'),'render')):base;};
-  // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
-  for(const kind of ['preview','read','snapshot'] as const){
+  // The editor opens only once its audio is prepared and playback is ready. Audio preparation takes seconds (a stream
+  // copy plus a waveform), while a playback preview transcodes the whole video, so the audio goes first: claimed after
+  // the preview, it waited out that transcode or a cold-started slot. Agent frame checks follow, ahead of exports and
+  // long analysis.
+  for(const kind of ['extract','waveform','preview','read','snapshot'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
     // A frame check an agent waits on goes before share covers, which nobody is waiting for.
     if(kind==='snapshot'){const asked=[];for(const row of rows){const snapshot=row.snapshotId?await ctx.db.get(row.snapshotId):null;if(snapshot&&!snapshot.clipId&&!snapshot.shareId)asked.push(row);}if(asked.length)rows=asked;}
-    const quick=await fairest(ctx,rows);if(quick)return quick;
+    const quick=await fairest(ctx,rows,!excludedKinds.includes('extract'));if(quick)return quick;
   }
   // Exports are interactive; claim them before long queued analysis work.
   const renders=skipRenders?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);
-  const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
+  const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN),!excludedKinds.includes('extract'));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
   if (indexed) return indexed;
   const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(skipRenders?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
