@@ -226,6 +226,8 @@ function clampReport(clamped: readonly RetainedRangeClamp[]) {
   const beyond = clamped.filter(item => item.beyondTolerance);
   return { clampedRanges: clamped, clampNote: `Clamped ${clamped.length} range${clamped.length === 1 ? '' : 's'} to the clip's retained source: footage an earlier cut removed, or outside the clip, was not kept. applied lists what was kept.${beyond.length ? ` Range${beyond.length === 1 ? '' : 's'} ${beyond.map(item => item.range).join(', ')} reached more than ${CLAMP_TOLERANCE * 1000} ms past the retained source; footage there stays off the timeline (restoreClip brings it back if it was wanted).` : ''}` };
 }
+/** Tools that put back saved state: clip ids are taken as given (a deleted clip can be restored) and captions do not follow. */
+const RESTORING_TOOLS = ['restoreClip', 'restoreTimeline', 'undoLatestEdit', 'listRevisions', 'getFrames'];
 const EXHAUSTED_CALLABLE = new Set(['finish', 'reportLimitation', 'reportIssue']);
 const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'listExports', 'getExport', 'cancelExport', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief', ...POSTING_TOOLS]);
 
@@ -434,7 +436,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const result = await editSession.checkpoint(timeline => {
     let edited = edit(timeline);
     // Captions follow their words when footage moved (trim, move, join, closing gaps), so none is fixed one at a time later.
-    if (edited.clips.some(clip => (clip.kind === 'video' || clip.kind === 'audio') && !timeline.clips.some(old => old.id === clip.id && old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart)) || timeline.clips.some(old => (old.kind === 'video' || old.kind === 'audio') && !edited.clips.some(clip => clip.id === old.id))) {
+    // A restore puts back exactly what was saved, captions included: nothing follows then.
+    const oldMedia = new Map(timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'audio').map(clip => [clip.id, clip])), newIds = new Set(edited.clips.map(clip => clip.id));
+    const footageMoved = edited.clips.some(clip => (clip.kind === 'video' || clip.kind === 'audio') && ((old) => !old || old.start !== clip.start || old.duration !== clip.duration || old.sourceStart !== clip.sourceStart)(oldMedia.get(clip.id))) || [...oldMedia.keys()].some(id => !newIds.has(id));
+    if (footageMoved && !RESTORING_TOOLS.some(name => runningTools.has(name))) {
       // A follow never trims or removes another caption: only an edge under a frame into a neighbour stops at it.
       const follow = followSpeechCaptions(timeline, edited, assets, (t, clipId, range) => { const retimed = updateCaptionTiming(t, clipId, range); if (retimed.neighbours.length) throw new Error('neighbour'); return retimed.timeline; });
       edited = follow.timeline; followed = follow.followed;
@@ -466,11 +471,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // the same kind) that now cover its source range or time. Empty when it was deleted outright.
   const successors = new Map<string, string[]>();
   const recordSuccessors = (before: Timeline, after: Timeline) => {
-    const live = new Set(after.clips.map(clip => clip.id)), end = (clip: Clip) => clip.start + clip.duration;
+    const live = new Set(after.clips.map(clip => clip.id)), old = new Map(before.clips.map(clip => [clip.id, clip])), end = (clip: Clip) => clip.start + clip.duration;
+    // Only a clip this edit made or changed can be what a removed clip became; one left as it was is a neighbour.
+    const changed = after.clips.filter(clip => { const was = old.get(clip.id); return !was || was.start !== clip.start || was.duration !== clip.duration || was.sourceStart !== clip.sourceStart; });
     for (const gone of before.clips) {
       if (live.has(gone.id)) continue;
       const media = !!gone.assetId && (gone.kind === 'video' || gone.kind === 'audio' || gone.kind === 'image');
-      successors.set(gone.id, after.clips.filter(clip => clip.kind === gone.kind && (media
+      successors.set(gone.id, changed.filter(clip => clip.kind === gone.kind && trackOf(clip) === trackOf(gone) && (media
         ? clip.assetId === gone.assetId && clip.sourceStart < sourceEndOf(gone) - 1e-6 && sourceEndOf(clip) > gone.sourceStart + 1e-6
         : clip.start < end(gone) - 1e-6 && end(clip) > gone.start + 1e-6)).map(clip => clip.id));
     }
@@ -1743,7 +1750,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
     closeGaps: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.closeGaps, description: "Join footage after cuts: ONE call with no arguments closes EVERY gap between video/image clips on the main footage layer, including sub-frame gaps, moving later clips earlier with their sound (linked, or the unlinked audio of the same take under them), and puts each footage piece's own sound back in sync with its picture and on its in/out; captions follow their spoken words. Never go gap by gap; to merge two pieces of one take into one clip use joinClips. track joins one other V layer, allLayers:true packs every visual layer, clipIds (two or more) limits it to the gaps between those clips. Overlays, b-roll and other layers stay where they are (ripple them with moveClips). Returns closedGaps and remainingGaps.", inputSchema: z.object({ clipIds: clipIdsInput.optional(), track: z.number().int().min(1).max(24).optional().describe('Join this V layer instead of the main footage layer.'), allLayers: z.boolean().optional().describe('Pack every visual layer that holds footage. Overlays placed by time lose their positions.') }), execute: async (_ctx, input) => {
       let before: ReturnType<typeof footageGaps> = [], tracks: number[] | undefined, realigned: string[] = [];
-      const result = await checkpoint(t => { const main = mainFootageTrack(t); tracks = input.allLayers || input.clipIds ? undefined : [input.track ?? main ?? 1]; before = footageGaps(t); const audioAssetOf = (assetId: string) => assets.find(asset => asset._id === assetId)?.audioAssetId; const aligned = alignSounds(closeFootageGaps(t, input.clipIds ?? [], tracks, audioAssetOf), audioAssetOf); realigned = aligned.aligned; return aligned.timeline; });
+      const result = await checkpoint(t => { const main = mainFootageTrack(t); tracks = input.allLayers || input.clipIds ? undefined : [input.track ?? main ?? 1]; before = footageGaps(t); const audioAssetOf = (assetId: string) => assets.find(asset => asset._id === assetId)?.audioAssetId; const closedTimeline = closeFootageGaps(t, input.clipIds ?? [], tracks, audioAssetOf), scope = new Set(closedTimeline.clips.filter(clip => clip.kind === 'video' && (input.clipIds ? input.clipIds.includes(clip.id) : !tracks || tracks.includes(trackOf(clip)))).map(clip => clip.id)); const aligned = alignSounds(closedTimeline, audioAssetOf, scope); realigned = aligned.aligned; return aligned.timeline; });
       const joined = (gap: { track: number }) => !tracks || tracks.includes(gap.track);
       const remaining = footageGaps(editSession.timeline).filter(joined), closed = before.filter(gap => joined(gap) && !remaining.some(left => left.beforeClipId === gap.beforeClipId && left.track === gap.track));
       const round = (value: number) => Math.round(value * 1000) / 1000;
@@ -1756,7 +1763,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (speech.cleanup) {
           // Validate the request as asked before measured adjustment; ranges spilling past the retained source are clamped to it.
           const { clamped } = retainSourceRanges(editSession.timeline, input.clipId, input.ranges, undefined, true);
-          const cut = await applySpeechCut(input.clipId, speech, input.ranges, input.keepPauses ? new Set() : new Set(['pause', 'breath', 'filler']), .6);
+          // The cleanup works on what is retained: a clamped range's applied parts, never the removed footage between them.
+          const applied = input.ranges.flatMap((range, index) => clamped.find(item => item.range === index + 1)?.applied ?? [range]);
+          const cut = await applySpeechCut(input.clipId, speech, applied, input.keepPauses ? new Set() : new Set(['pause', 'breath', 'filler']), .6);
           return { ...cut, ...clampReport(clamped) };
         }
         evidence = speech.evidence;
@@ -1880,7 +1889,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const priorRead = priorEntry?.output as { accepted?: Record<string, string>; rounds?: number; heard?: string; heardCut?: string; cutAway?: { assetId: string; start: number; end: number }[] } | undefined, unchanged = priorEntry?.fingerprint === await timelineHistoryKey(editSession.timeline);
       // Sentence numbers and heard belong to a read of the cut as it is now. When the cut changed since the last read (or it was
       // never read), nothing is cut: this call becomes that read, so the next call can act on fresh numbers without a separate read.
-      const stale = (input.drop?.length || input.heard) && taskId && !unchanged ? { drop: !!input.drop?.length, heard: !!input.heard } : undefined;
+      const stale = (input.drop?.length || input.heard) && taskId && !unchanged ? { drop: !!input.drop?.length, heard: !!input.heard, remove: !!input.remove?.length } : undefined;
       if (stale) input = { ...(input.accept ? { accept: input.accept } : {}), ...(input.maxPause !== undefined ? { maxPause: input.maxPause } : {}) };
       // Checked before anything is cut, so a refused call changes nothing.
       const unknown = (input.accept ?? []).filter(item => !read.flags.some(flag => flag.id === item.id));
@@ -1925,7 +1934,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const strict = lane === 'reel' && (!!task?.script || rounds > 0);
       const kept = Object.keys(accepted), open = script.flags.filter(flag => !kept.includes(flag.id)), failing = open.filter(flag => cutFlagFails(flag, [], strict && !stop) && !(task?.script && flag.kind === 'mid-sentence' && flag.atCut)), speech = open.filter(flag => CUT_FAILING_KINDS.includes(flag.kind));
       const time = (value: number) => Math.round(value * 100) / 100;
-      const refreshed = stale ? { refreshed: `The cut changed since the last read (or it was never read), so this call cut nothing${stale.heard ? ' and did not record heard' : ''}: ${stale.drop ? 'its sentence numbers were for an older cut' : 'heard is the verdict on the cut as it is now'}. This result is a fresh read of the cut as it is now. Read the prose below, then send ${stale.drop ? 'drop with these sentence numbers' : 'heard'} in your next readCutScript call.` } : {};
+      const refreshed = stale ? { refreshed: `The cut changed since the last read (or it was never read), so this call cut nothing${stale.heard ? ' and did not record heard' : ''}: ${stale.drop ? 'its sentence numbers were for an older cut' : 'heard is the verdict on the cut as it is now'}. This result is a fresh read of the cut as it is now. Read the prose below, then send ${stale.drop ? `drop with these sentence numbers${stale.remove ? ' and remove with these flag ids' : ''}` : 'heard'} in your next readCutScript call.` } : {};
       return { ...refreshed, wordCount: script.words.length, duration: time(script.words.at(-1)!.end), cuts: script.cuts.length,
         opening: { at: time(script.lines[0].start), text: script.lines[0].text.replace(/‖ /g, '') }, closing: { at: time(script.lines.at(-1)!.end), text: script.lines.at(-1)!.text.replace(/‖ /g, '') },
         prose: cutProse(script),
@@ -2492,14 +2501,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const stillRead = name === 'readFrames' && assets.find(asset => asset._id === (input as { assetId?: string }).assetId)?.kind === 'image';
       if (recipe().boundedReads && name === 'readFrames' && !stillRead && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: BOUNDED_READ_REFUSAL };
       // An id an earlier edit of this request cut or replaced is read as the clip it became, and the result says so.
-      const resolved = resolveStaleIds(editSession.timeline, args[0]);
+      const resolved = RESTORING_TOOLS.includes(name) ? { input: args[0], notes: [] as string[] } : resolveStaleIds(editSession.timeline, args[0]);
       if (resolved.refusal) return { success: false, error: resolved.refusal };
       if (resolved.notes.length) args = [resolved.input, ...args.slice(1)] as never[];
       const before = editSession.timeline;
       runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
       try {
         let output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
-        if (before !== editSession.timeline) recordSuccessors(before, editSession.timeline);
+        // Another tab's clips are not what this tab's clips became.
+        if (name === 'createTimeline' || name === 'openTimeline') successors.clear();
+        else if (before !== editSession.timeline) recordSuccessors(before, editSession.timeline);
         if (resolved.notes.length && output && typeof output === 'object' && !Array.isArray(output)) output = { ...(output as object), staleIds: resolved.notes.join(' ') } as typeof output;
         if (output?.staged === true) stagedTools.add(name);
         if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {

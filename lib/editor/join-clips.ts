@@ -28,22 +28,33 @@ export function soundFor(timeline: Timeline, video: Clip, audioAssetOf: AudioAss
     .sort((a, b) => overlap(b) - overlap(a))[0];
 }
 
-export type SoundMisalignment = { videoClipId: string; audioClipId: string; outOfSyncSeconds: number; video: { start: number; end: number }; audio: { start: number; end: number }; problem: string };
+export type SoundMisalignment = { videoClipId: string; audioClipId: string; outOfSyncSeconds: number; video: { start: number; end: number }; audio: { start: number; end: number }; problem: string; /** The sound clip also plays under another picture piece. */ shared?: true };
 
 /** Footage pieces whose sound plays out of sync with the picture, or whose sound starts or ends elsewhere than the
  *  picture without a J/L split edit. Half a frame is tolerated. */
+/** Each video piece's sound, and how many pieces share each sound clip: found once per timeline. */
+function soundsOf(timeline: Timeline, audioAssetOf: AudioAssetOf) {
+  const sound = new Map<string, Clip>(), shared = new Map<string, number>();
+  for (const video of timeline.clips) {
+    if (video.kind !== 'video') continue;
+    const found = soundFor(timeline, video, audioAssetOf);
+    if (found) { sound.set(video.id, found); shared.set(found.id, (shared.get(found.id) ?? 0) + 1); }
+  }
+  return { sound, shared };
+}
+
 export function soundMisalignments(input: Timeline, audioAssetOf: AudioAssetOf = () => undefined): SoundMisalignment[] {
-  const timeline = normalizeTimeline(input), half = .5 / timeline.fps, copies = stackedMirrorCopyIds(timeline), found: SoundMisalignment[] = [];
+  const timeline = normalizeTimeline(input), half = .5 / timeline.fps, copies = stackedMirrorCopyIds(timeline), found: SoundMisalignment[] = [], { sound: sounds, shared } = soundsOf(timeline, audioAssetOf);
   for (const video of timeline.clips) {
     if (video.kind !== 'video' || copies.has(video.id) || video.speedRamp?.length) continue;
-    const sound = soundFor(timeline, video, audioAssetOf);
+    const sound = sounds.get(video.id);
     if (!sound) continue;
     // Two pieces of the same take share one sound clip only when the sound was never split with the picture.
-    const sharers = timeline.clips.filter(other => other.kind === 'video' && other.id !== video.id && soundFor(timeline, other, audioAssetOf)?.id === sound.id);
+    const sharers = (shared.get(sound.id) ?? 1) > 1 ? [sound] : [];
     const drift = (syncOf(sound) - syncOf(video)) / playbackRateOf(video);
     const edges = Math.abs(sound.start - video.start) > half || Math.abs(endOf(sound) - endOf(video)) > half;
     const problem = Math.abs(drift) > half ? `sound is ${round(Math.abs(drift))} s ${drift > 0 ? 'ahead of' : 'behind'} the picture` : edges && !video.audioSeparated && !sharers.length ? 'sound starts or ends elsewhere than the picture' : '';
-    if (problem) found.push({ videoClipId: video.id, audioClipId: sound.id, outOfSyncSeconds: round(drift), video: { start: round(video.start), end: round(endOf(video)) }, audio: { start: round(sound.start), end: round(endOf(sound)) }, problem });
+    if (problem) found.push({ videoClipId: video.id, audioClipId: sound.id, outOfSyncSeconds: round(drift), video: { start: round(video.start), end: round(endOf(video)) }, audio: { start: round(sound.start), end: round(endOf(sound)) }, problem, ...(sharers.length ? { shared: true as const } : {}) });
   }
   return found;
 }
@@ -55,8 +66,8 @@ export function alignSounds(input: Timeline, audioAssetOf: AudioAssetOf = () => 
   const timeline = normalizeTimeline(input), patches = new Map<string, Partial<Clip>>();
   for (const item of soundMisalignments(timeline, audioAssetOf)) {
     const video = timeline.clips.find(clip => clip.id === item.videoClipId)!, sound = timeline.clips.find(clip => clip.id === item.audioClipId)!;
-    if (sound.linkedClipId || video.audioSeparated || (onlyVideoIds && !onlyVideoIds.has(video.id)) || patches.has(sound.id)) continue;
-    if (timeline.clips.some(other => other.id !== video.id && other.kind === 'video' && soundFor(timeline, other, audioAssetOf)?.id === sound.id)) continue;
+    if (item.shared || sound.linkedClipId || video.audioSeparated || (onlyVideoIds && !onlyVideoIds.has(video.id)) || patches.has(sound.id)) continue;
+
     patches.set(sound.id, { start: video.start, duration: video.duration, sourceStart: video.sourceStart });
   }
   if (!patches.size) return { timeline: input, aligned: [] };
