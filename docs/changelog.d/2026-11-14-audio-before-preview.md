@@ -1,0 +1,1 @@
+- Media processor: an upload's audio preparation is claimed before its playback preview, and a quick-work slot may take it. Why: a 23 s upload sat on "Preparing audio" for 89 s behind the preview's download and transcode, though the audio itself takes 2 s.

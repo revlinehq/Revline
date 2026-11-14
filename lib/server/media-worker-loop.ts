@@ -28,10 +28,10 @@ export type MediaWorkerOptions = {
   log: (event: MediaWorkerEvent, fields: Record<string, unknown>) => void;
 };
 type MediaKind = import('../../convex/lib/media_task_contract').MediaWorkItem['kind'];
-/** Short checks an agent waits on. A worker with several slots keeps one for them,
- *  so a long export or analysis in its other slots never starves frames or sound. */
-const QUICK_KINDS = { preview: true, read: true, snapshot: true, blueprint: true, review: true, frames: true,
-  render: false, import: false, extract: false, waveform: false, cutout: false, derive: false, highlights: false, transcribe: false,
+/** Short work someone waits on: agent checks and the audio an upload needs before the editor opens. A worker with
+ *  several slots keeps one for them, so a long export or analysis in its other slots never starves frames or sound. */
+const QUICK_KINDS = { preview: true, read: true, snapshot: true, blueprint: true, review: true, frames: true, extract: true, waveform: true,
+  render: false, import: false, cutout: false, derive: false, highlights: false, transcribe: false,
   understand: false, shots: false, beats: false, track: false, video: false, reference: false, facecam: false, speakers: false } satisfies Record<MediaKind, boolean>;
 const SLOW_KINDS = (Object.keys(QUICK_KINDS) as MediaKind[]).filter(kind => !QUICK_KINDS[kind]);
 export type MediaWorkerState = { activeTasks: number; lastWorkAt: number; ready: boolean };
