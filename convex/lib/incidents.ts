@@ -2,8 +2,9 @@ import { tablePatch, tableRow } from './exact';
 import { z } from 'zod';
 import { v, type Infer } from 'convex/values';
 import type { MutationCtx } from '../_generated/server';
+import type { Id } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
-import { incidentContext, incidentNormalized, incidentText, isAgentFiled } from '../../lib/incidents';
+import { incidentContext, incidentNormalized, incidentText, isIssueFiled, isToolErrorKind, TOOL_ERROR_THRESHOLD, toolErrorIdentity, toolErrorIssueText, toolErrorMessage, type ToolErrorImpact, type ToolErrorReport } from '../../lib/incidents';
 
 export const incidentArgs = {
   source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()),
@@ -31,9 +32,9 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   const diagnostic = z.object({ location: z.string().optional(), toolName: z.string().optional(), taskKind: z.string().optional() }).catch({}).parse(JSON.parse(context));
   const location = diagnostic.location ?? input.stack?.split('\n').find(line => /\bat\b|:\d+:\d+/.test(line)) ?? input.source;
   const fingerprint = await incidentFingerprint(input.identity ?? [incidentNormalized(message), incidentNormalized(location), input.kind, diagnostic.toolName ?? diagnostic.taskKind ?? '']);
-  // Agent-filed rows are published as issues by their own lease and never reopen or reach the fixer webhook.
-  // A limitation is a feature gap for a person to triage, so it never waits in the fixer's delivery queue.
-  const agentFiled = isAgentFiled(input.kind);
+  // Agent-filed rows and tool errors are published as issues by their own lease and never reopen or reach the fixer webhook.
+  // A limitation is a feature gap for a person to triage and a tool error is counted until it repeats, so neither waits in the fixer's delivery queue.
+  const agentFiled = isIssueFiled(input.kind);
   const existing = await ctx.db.query('incidents').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
   const now = Date.now();
   const sample = { at: now, context, ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.runId ? { runId: incidentText(input.runId, 150) } : {}) };
@@ -47,7 +48,7 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
     samples: [...(existing?.samples ?? []).slice(-3), sample],
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
-  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' || client ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}), ...(client ? { needsTriage: true } : {}) }));
+  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' || isToolErrorKind(input.kind) || client ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}), ...(client ? { needsTriage: true } : {}) }));
   // A new occurrence gives an exhausted issue delivery a fresh budget; issue bodies are bounded now.
   const issueRetry = agentFiled && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
   if (existing) await ctx.db.patch(id, tablePatch<'incidents'>()({ ...value, ...issueRetry, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) }));
@@ -63,4 +64,30 @@ export async function recordIncidentSafely(ctx: MutationCtx, input: Infer<typeof
     console.error(`[incidents] ${JSON.stringify({ event: 'record-failed', kind: input.kind, source: input.source, error: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`);
     return null;
   }
+}
+
+const shortHash = async (value: string) => (await incidentFingerprint([value])).slice(-16);
+const TOOL_ERROR_USERS = 100, TOOL_ERROR_RECENT = 25;
+export type ToolErrorScope = { ownerId: string; projectId?: Id<'projects'>; runId?: string; surface: 'editor' | 'mcp'; impact: ToolErrorImpact };
+/** Each tool error is one row per identity (lib/incidents.ts). The same error again in the same turn adds no
+ * occurrence; a later report from that turn only updates the latest impact (a turn that failed after it). */
+export async function recordToolError(ctx: MutationCtx, scope: ToolErrorScope, report: ToolErrorReport, counted = false) {
+  const identity = toolErrorIdentity(report), fingerprint = await incidentFingerprint(identity), now = Date.now();
+  const user = await shortHash(`${fingerprint}:${scope.ownerId}`), run = scope.runId ? await shortHash(`${fingerprint}:${scope.runId}`) : `once-${crypto.randomUUID().slice(0, 8)}`;
+  const existing = await ctx.db.query('incidents').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
+  // counted: the turn's step report already added this occurrence, even if a busy row has since dropped its run marker.
+  if (existing?.toolError && (counted || existing.toolError.recent.some(item => item.run === run))) {
+    if (existing.toolError.impact !== scope.impact) await ctx.db.patch(existing._id, { toolError: { ...existing.toolError, impact: scope.impact } });
+    return existing._id;
+  }
+  const id = await recordIncident(ctx, {
+    source: scope.surface === 'mcp' ? 'mcp' : 'assistant', kind: report.kind, identity, message: toolErrorMessage(report),
+    context: { location: scope.surface === 'mcp' ? 'convex/mcpActions:callTool' : 'editor-turn:step', toolName: report.toolName, condition: report.errorClass, event: scope.impact, ...(report.issues ? { inputShape: toolErrorIssueText(report.issues) } : {}) },
+    ...(scope.projectId ? { projectId: scope.projectId } : {}), ...(scope.runId ? { runId: scope.runId } : {}), deployment: incidentDeployment(),
+  });
+  const previous = existing?.toolError;
+  const users = previous?.users.includes(user) ? previous.users : [...(previous?.users ?? []), user].slice(0, TOOL_ERROR_USERS);
+  const recent = [...(previous?.recent ?? []).filter(item => item.at > now - TOOL_ERROR_THRESHOLD.windowMs), { at: now, user, run }].slice(-TOOL_ERROR_RECENT);
+  await ctx.db.patch(id, { toolError: { impact: scope.impact, surface: scope.surface, users, recent } });
+  return id;
 }

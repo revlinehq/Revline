@@ -318,6 +318,12 @@ export default defineSchema({
     needsTriage: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
+    // tool-error and tool-input-invalid rows (lib/incidents.ts): the latest impact, pseudonymous user hashes (salted with
+    // the fingerprint, so rows cannot be linked) for the distinct-user count, and recent occurrences for the 7-day threshold.
+    toolError: v.optional(v.object({
+      impact: v.union(v.literal('recovered'), v.literal('turn-failed')), surface: v.union(v.literal('editor'), v.literal('mcp')),
+      users: v.array(v.string()), recent: v.array(v.object({ at: v.number(), user: v.string(), run: v.string() })),
+    })),
   }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
   assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),
     // What kind of failure `error` is (lib/ai/run-failure); absent on turns that failed before codes and on uncoded failures.

@@ -14,7 +14,7 @@ const TURN_FUNCTIONS = new Set([
   'clipping:begin', 'clipping:review', 'clipping:prepareCheck', 'clipping:checkTranscript', 'clipping:selectChecks', 'clipping:reserveVisual', 'clipping:recordVisual', 'clipping:completionState', 'clipping:runStarted',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
-  'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportLimitation', 'incidents:reportRunner',
+  'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportLimitation', 'incidents:reportRunner', 'incidents:reportToolErrors',
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record', 'usage:aiRefusal',
   'assistant:listRunTimelines', 'assistant:createRunTimeline', 'assistant:openRunTimeline', 'assistant:importRunVideo', 'assistant:runMediaTask', 'assistant:exportRunVideo',

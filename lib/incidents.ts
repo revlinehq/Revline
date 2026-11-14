@@ -61,3 +61,60 @@ export function incidentNonDefectReason(message: string, kind: string, contexts:
   if (kind === 'agent-report' && /\bno (?:reproducible |actual |confirmed )?(?:product )?(?:defect|bug)(?:s)?\b|\bnot a (?:product )?(?:defect|bug)\b|\bworking as (?:intended|expected)\b/i.test(evidence)) return 'Agent reported no product defect';
   return null;
 }
+
+/** A tool call in an assistant turn (in-app or MCP) that returned an error or a refusal. The turn usually carries on, so
+ * nothing else records it. tool-input-invalid is the AI SDK refusing the model's arguments against the tool's schema:
+ * a schema or prompt bug. Both group by tool, error class and normalized message, and become public issues only once
+ * they repeat (scripts/incident-listener/issues.ts). Never sent to the automated fixer. */
+export const TOOL_ERROR_KINDS = ['tool-error', 'tool-input-invalid'] as const;
+export type ToolErrorKind = typeof TOOL_ERROR_KINDS[number];
+export const isToolErrorKind = (kind: string): kind is ToolErrorKind => (TOOL_ERROR_KINDS as readonly string[]).includes(kind);
+/** Kinds the issue publisher files: agent reports at once, tool errors once they repeat. */
+export const ISSUE_FILED_KINDS = [...AGENT_FILED_KINDS, ...TOOL_ERROR_KINDS] as const;
+export type IssueFiledKind = typeof ISSUE_FILED_KINDS[number];
+export const isIssueFiled = (kind: string): kind is IssueFiledKind => (ISSUE_FILED_KINDS as readonly string[]).includes(kind);
+/** What failed, from a fixed list so it can be shown publicly: how the arguments were refused, a returned refusal, a
+ * failed finish check, a thrown error, or a thrown run failure's own code (lib/ai/run-failure). */
+export const TOOL_ERROR_CLASSES = ['input-invalid', 'invalid-json', 'unknown-tool', 'refusal', 'check-failed', 'thrown', 'conflict', 'locked', 'refused', 'limit', 'unavailable', 'invalid', 'internal'] as const;
+export type ToolErrorClass = typeof TOOL_ERROR_CLASSES[number];
+/** recovered: the turn went on past the error (as of the latest report). turn-failed: the turn it happened in failed. */
+export const TOOL_ERROR_IMPACTS = ['recovered', 'turn-failed'] as const;
+export type ToolErrorImpact = typeof TOOL_ERROR_IMPACTS[number];
+/** A schema issue without its value: where in the arguments and which check. */
+export type ToolInputIssue = { path: string; code: string };
+export type ToolErrorReport = { toolName: string; kind: ToolErrorKind; errorClass: ToolErrorClass; message: string; issues?: ToolInputIssue[] };
+/** Repeats needed before a tool error becomes a public issue: this many occurrences, or this many users, in the window. */
+export const TOOL_ERROR_THRESHOLD = { windowMs: 7 * 24 * 60 * 60_000, occurrences: 3, users: 2 } as const;
+
+/** A tool error's message reduced to its shape: scrubbed, quoted text removed, and every token holding a digit (ids,
+ * times, counts, 3.2s, clip_4f) replaced, so the same refusal about different clips is one row. */
+export function toolErrorNormalized(message: string): string {
+  return incidentText(message, 2000).toLowerCase()
+    .replace(/\[request id:[^\]]*\]/g, '')
+    .replace(/^(?:\s*(?:uncaught\s+)?(?:convexerror|error|server error)\s*:?)+/g, '')
+    .replace(/[\w.:/-]*\d[\w.:/-]*/g, '#')
+    .replace(/\[(?:quoted value|opaque value|media file|email|url|redacted|credential redacted|payload omitted)\]/g, '…')
+    .replace(/(?:[#…][\s,]*){2,}/g, '# ')
+    .replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+/** Path segments are schema property names; array indexes and anything that is not a plain name are masked. */
+const issuePath = (path: readonly unknown[]) => path.slice(0, 8).map(part => typeof part === 'number' || /^\d+$/.test(String(part)) ? '#' : /^[A-Za-z_][A-Za-z0-9_]{0,40}$/.test(String(part)) ? String(part) : '?').join('.') || '(root)';
+/** The zod issues behind an AI SDK input-validation failure, without their values. Follows the error's cause chain. */
+export function toolInputIssues(error: unknown): ToolInputIssue[] | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
+    const issues = (current as { issues?: unknown }).issues;
+    if (Array.isArray(issues)) return issues.slice(0, 8).map(issue => {
+      const item = issue && typeof issue === 'object' ? issue as { path?: unknown; code?: unknown } : {};
+      return { path: issuePath(Array.isArray(item.path) ? item.path : []), code: typeof item.code === 'string' && /^[a-z_]{1,40}$/.test(item.code) ? item.code : 'unknown' };
+    });
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+const issueSignature = (issues: readonly ToolInputIssue[]) => [...new Set(issues.map(issue => `${issue.path}:${issue.code}`))].sort().join(' ') || 'no issues';
+/** One tool error is one incident row: the same kind, tool, class and normalized message (or schema issues), whoever met it. */
+export const toolErrorIdentity = (report: ToolErrorReport) => [report.kind, report.toolName, report.errorClass, report.kind === 'tool-input-invalid' && report.issues ? issueSignature(report.issues) : toolErrorNormalized(report.message)];
+/** The row's private message: structure only, never the raw error text. */
+export const toolErrorMessage = (report: ToolErrorReport) => `${report.toolName}: ${report.errorClass}: ${report.kind === 'tool-input-invalid' && report.issues ? issueSignature(report.issues) : toolErrorNormalized(report.message)}`;
+export const toolErrorIssueText = (issues: readonly ToolInputIssue[] | undefined) => issues ? issueSignature(issues) : undefined;

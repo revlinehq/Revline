@@ -39,6 +39,7 @@ import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
 import { completionRepairFeedback, AssistantRefusalError, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, repeatedToolFailure, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
+import { stepToolErrors, TurnToolErrors } from '../../lib/ai/tool-error-incidents';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
@@ -59,6 +60,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     failedWrites => console.warn(`[ai-cost] ${JSON.stringify({ event: 'history-write-failed', projectId: args.projectId, runId: args.runId, failedWrites })}`),
   );
   const timer = new StepTimer();
+  const toolErrors = new TurnToolErrors();
   const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
     console.log(`[ai-cost] ${JSON.stringify(event)}`);
     // Always recorded: every model call's cost counts toward the plan's AI allowance.
@@ -249,7 +251,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => { timer.modelEnd(event.callId, currentStep, event); costLog.modelCall({ ...event, stepNumber: currentStep }, progress()); },
           // The step's timings ride on its checkpoint: no extra round trip.
-          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); const timed = timer.drain(); await safely('turnCheckpoint',()=>ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames(),...(timed.length?{timings:{lane:toolkit.lane(),model:selection.modelId,effort:selection.reasoningEffort,steps:timed}}:{})})); },
+          // Failed tool calls are filed as incidents beside the checkpoint, in parallel: no extra wait, and never a failed step.
+          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); const timed = timer.drain(); const failedTools = toolErrors.add(stepToolErrors(event.content)); await Promise.all([safely('turnCheckpoint',()=>ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames(),...(timed.length?{timings:{lane:toolkit.lane(),model:selection.modelId,effort:selection.reasoningEffort,steps:timed}}:{})})), failedTools.length ? safely('toolErrorIncidents',()=>ctx.runMutation(internal.incidents.reportToolErrors,{...run,impact:'recovered',errors:failedTools}).then(()=>true)).then(ok=>toolErrors.settled(failedTools,ok===true)) : undefined]); },
           onError: ({ error }) => { streamError = error; },
           // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
           timeout: MODEL_SILENCE_LIMITS,
@@ -322,6 +325,9 @@ For edit requests, use one brief initial sentence stating the requested action, 
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved as revision ${session?.revision}. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
+    // The tool errors this turn met stay counted once; their latest impact becomes the failed turn.
+    const failedTools = toolErrors.all();
+    for (let start = 0; start < failedTools.length; start += 10) await safely('toolErrorIncidents', () => ctx.runMutation(internal.incidents.reportToolErrors, { ...run, impact: 'turn-failed', errors: failedTools.slice(start, start + 10) }));
     await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, ...(errorCode ? { errorCode } : {}), savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
   } finally { clearInterval(watch); await costHistory.flush(); }
   return null;

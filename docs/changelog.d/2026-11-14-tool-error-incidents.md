@@ -1,0 +1,1 @@
+- Incidents: tool calls that fail inside an assistant turn (in-app or MCP) are recorded as tool-error or tool-input-invalid rows, grouped by tool, error class and normalized message, and filed as public issues once they repeat (3 in 7 days, or 2 users). Why: a prod run had 5 of 12 steps fail and none of it surfaced.
