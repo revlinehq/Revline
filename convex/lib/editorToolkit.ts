@@ -23,7 +23,7 @@ import { LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../../lib/incidents';
 import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, changedFrameLimit, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
 import { MAX_SHEET_FRAMES, MAX_ZOOM_FRAMES, sampleFrameTimes } from '../../lib/ai/frame-sampling';
 import type { CheckLevel } from '../../lib/ai/lanes/types';
-import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
+import { captionSyncFailures, followSpeechCaptions, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
 import { CUT_FAILING_KINDS, CUT_READ_ROUNDS, CUT_READING, cutFlagFails, cutProse, cutScript, cutSignature, cutWordsRemoval } from '../../lib/ai/lanes/reel/cut-script';
 import { FastFrameReview, fastReelFrameMoments, speechCutMoments, readFastFrameTimes, fastFrameEvidence } from '../../lib/ai/fast-frame-review';
 import { effectPlanInput,validateEffectPlan,mergeEffectPlans,effectReviewBindings,type EffectPlan,type EffectEvidence } from '../../lib/ai/edit-plan';
@@ -428,10 +428,17 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return read;
   };
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
-    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false;
+    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [];
     await refreshAfterRecovery();
     const result = await editSession.checkpoint(timeline => {
-    const grid = onFrameGrid(edit(timeline), timeline); healed = grid.healed;
+    let edited = edit(timeline);
+    // Captions follow their words when footage moved (trim, move, join, closing gaps), so none is fixed one at a time later.
+    if (edited.clips.some(clip => (clip.kind === 'video' || clip.kind === 'audio') && !timeline.clips.some(old => old.id === clip.id && old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart)) || timeline.clips.some(old => (old.kind === 'video' || old.kind === 'audio') && !edited.clips.some(clip => clip.id === old.id))) {
+      // A follow never trims or removes another caption: only an edge under a frame into a neighbour stops at it.
+      const follow = followSpeechCaptions(timeline, edited, assets, (t, clipId, range) => { const retimed = updateCaptionTiming(t, clipId, range); if (retimed.neighbours.length) throw new Error('neighbour'); return retimed.timeline; });
+      edited = follow.timeline; followed = follow.followed;
+    }
+    const grid = onFrameGrid(edited, timeline); healed = grid.healed;
     // The edit that opens a hole says so in its own result, not three finish checks later.
     holes = newPictureGaps(timeline, grid.timeline);
     const next = grid.timeline, collision = newLayerOverlaps(timeline, next)[0];
@@ -448,14 +455,58 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // An older media processor has no emoji font: say so with the edit instead of leaving a "NO GLYPH" box to be found in a frame.
     // Only for an edit that wrote the emoji text, so moves and trims of that caption stay quiet.
     const emoji = emojiText && !await processorCan(ctx, 'render:emoji');
-    return { ...result, ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
+    return { ...result, ...(followed.length ? { captionsFollowed: followed.length, captionNote: `${followed.length} caption${followed.length === 1 ? '' : 's'} moved with ${followed.length === 1 ? 'its' : 'their'} spoken words.` } : {}), ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
   };
   const markerCheckpoint = async (edit: (timeline: Timeline) => Timeline) => {
     const result = await checkpoint(edit);
     return { ...result, removed: result.removedMarkerIds.length };
   };
-  // A stale id gets the current clips back in the refusal, so the next call can name the right one without a re-read.
+  // What each clip id an edit in this request removed became: the clips of the same source (or, for text and effects,
+  // the same kind) that now cover its source range or time. Empty when it was deleted outright.
+  const successors = new Map<string, string[]>();
+  const recordSuccessors = (before: Timeline, after: Timeline) => {
+    const live = new Set(after.clips.map(clip => clip.id)), end = (clip: Clip) => clip.start + clip.duration;
+    for (const gone of before.clips) {
+      if (live.has(gone.id)) continue;
+      const media = !!gone.assetId && (gone.kind === 'video' || gone.kind === 'audio' || gone.kind === 'image');
+      successors.set(gone.id, after.clips.filter(clip => clip.kind === gone.kind && (media
+        ? clip.assetId === gone.assetId && clip.sourceStart < sourceEndOf(gone) - 1e-6 && sourceEndOf(clip) > gone.sourceStart + 1e-6
+        : clip.start < end(gone) - 1e-6 && end(clip) > gone.start + 1e-6)).map(clip => clip.id));
+    }
+  };
+  /** The live clips an id now stands for: itself, the clips it was cut or replaced into, [] when deleted, undefined when unknown. */
+  const liveSuccessors = (timeline: Timeline, id: string, depth = 0): string[] | undefined => {
+    if (timeline.clips.some(clip => clip.id === id)) return [id];
+    const next = successors.get(id);
+    if (!next || depth > 20) return next && [];
+    return [...new Set(next.flatMap(item => liveSuccessors(timeline, item, depth + 1) ?? []))];
+  };
+  const span = (timeline: Timeline, id: string) => { const clip = timeline.clips.find(item => item.id === id)!; return `${id} (${clip.kind}, ${Math.round(clip.start * 1000) / 1000}–${Math.round((clip.start + clip.duration) * 1000) / 1000} s)`; };
+  /** Rewrite stale clip ids in a tool input: one successor is used (and noted); several, or a deletion, refuse naming only those. */
+  const resolveStaleIds = (timeline: Timeline, input: unknown): { input: unknown; notes: string[]; refusal?: string } => {
+    const notes: string[] = [];
+    let refusal: string | undefined;
+    const idKey = (key: string) => /(^|[a-z])(clipId|ClipId)$|^clipIds$|^targetIds$|^(a|b)$/.test(key);
+    const swap = (id: string) => {
+      if (refusal || timeline.clips.some(clip => clip.id === id) || !successors.has(id)) return id;
+      const live = liveSuccessors(timeline, id) ?? [];
+      if (live.length === 1) { notes.push(`${id} was cut or replaced earlier in this request; used ${live[0]} instead.`); return live[0]; }
+      refusal = live.length ? `Clip ${id} was cut into ${live.length} clips earlier in this request: ${live.map(item => span(timeline, item)).join('; ')}. Nothing was changed. Repeat the call with the one you mean.` : `Clip ${id} was deleted earlier in this request. Nothing was changed. Read the current clips with inspectTimeline.`;
+      return id;
+    };
+    const walk = (value: unknown, key = ''): unknown => {
+      if (typeof value === 'string') return idKey(key) ? swap(value) : value;
+      if (Array.isArray(value)) return value.map(item => walk(item, key));
+      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, walk(item, name)]));
+      return value;
+    };
+    const next = walk(input);
+    return { input: next, notes, ...(refusal ? { refusal } : {}) };
+  };
+  // A stale id gets its successors (or the current clips) back in the refusal, so the next call can name the right one without a re-read.
   const find = (timeline: Timeline, id: string) => { const clip = timeline.clips.find(c => c.id === id); if (!clip) {
+    const live = liveSuccessors(timeline, id);
+    if (live) throw new Error(live.length ? `Clip ${id} was cut or replaced earlier in this request into ${live.map(item => span(timeline, item)).join('; ')}. Nothing was changed. Repeat the call with ${live.length === 1 ? 'that id' : 'the one you mean'}.` : `Clip ${id} was deleted earlier in this request. Nothing was changed. Read the current clips with inspectTimeline.`);
     const round = (value: number) => Math.round(value * 1000) / 1000, label = (c: Clip) => `${layerGroup(c.kind) === 'audio' ? 'A' : layerGroup(c.kind) === 'effects' ? 'FX' : 'V'}${trackOf(c)}`;
     const listed = [...timeline.clips].sort((a, b) => (a.kind === 'video' || a.kind === 'image' ? 0 : 1) - (b.kind === 'video' || b.kind === 'image' ? 0 : 1) || a.start - b.start).slice(0, 40);
     throw new Error(`Clip not found: ${id} is not on the current timeline (an id changes when its clip is cut, replaced or deleted). Nothing was changed. Clips now, as id kind layer start–end s${timeline.clips.length > listed.length ? ` (first ${listed.length} of ${timeline.clips.length})` : ''}: ${listed.map(c => `${c.id} ${c.kind} ${label(c)} ${round(c.start)}–${round(c.start + c.duration)}`).join('; ') || 'none'}. Repeat the call with one of these ids.`);
@@ -1678,7 +1729,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const read = input.windows ? modelAssetAnalysisWindows(evidence, input.windows) : modelAssetAnalysis(evidence, input.start !== undefined && input.end !== undefined ? { start: input.start, end: input.end } : undefined);
       return { assetId: asset._id, ...read, ...(transcriptNote ? { transcriptNote } : {}) };
     } }),
-    closeGaps: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.closeGaps, description: "Join footage after cuts: ONE call with no arguments closes EVERY gap between video/image clips on the main footage layer, including sub-frame gaps, moving later clips earlier with their linked audio; never go gap by gap. track joins one other V layer, allLayers:true packs every visual layer, clipIds (two or more) limits it to the gaps between those clips. Overlays, captions and clips on other layers stay where they are (ripple them with moveClips). Returns closedGaps and remainingGaps.", inputSchema: z.object({ clipIds: clipIdsInput.optional(), track: z.number().int().min(1).max(24).optional().describe('Join this V layer instead of the main footage layer.'), allLayers: z.boolean().optional().describe('Pack every visual layer that holds footage. Overlays placed by time lose their positions.') }), execute: async (_ctx, input) => {
+    closeGaps: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.closeGaps, description: "Join footage after cuts: ONE call with no arguments closes EVERY gap between video/image clips on the main footage layer, including sub-frame gaps, moving later clips earlier with their linked audio; captions follow their spoken words. Never go gap by gap. track joins one other V layer, allLayers:true packs every visual layer, clipIds (two or more) limits it to the gaps between those clips. Overlays, b-roll and other layers stay where they are (ripple them with moveClips). Returns closedGaps and remainingGaps.", inputSchema: z.object({ clipIds: clipIdsInput.optional(), track: z.number().int().min(1).max(24).optional().describe('Join this V layer instead of the main footage layer.'), allLayers: z.boolean().optional().describe('Pack every visual layer that holds footage. Overlays placed by time lose their positions.') }), execute: async (_ctx, input) => {
       let before: ReturnType<typeof footageGaps> = [], tracks: number[] | undefined;
       const result = await checkpoint(t => { const main = mainFootageTrack(t); tracks = input.allLayers || input.clipIds ? undefined : [input.track ?? main ?? 1]; before = footageGaps(t); return closeFootageGaps(t, input.clipIds ?? [], tracks); });
       const joined = (gap: { track: number }) => !tracks || tracks.includes(gap.track);
@@ -2428,10 +2479,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       // A still image is one frame: the window and sampling rules for video reads do not apply to it.
       const stillRead = name === 'readFrames' && assets.find(asset => asset._id === (input as { assetId?: string }).assetId)?.kind === 'image';
       if (recipe().boundedReads && name === 'readFrames' && !stillRead && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: BOUNDED_READ_REFUSAL };
+      // An id an earlier edit of this request cut or replaced is read as the clip it became, and the result says so.
+      const resolved = resolveStaleIds(editSession.timeline, args[0]);
+      if (resolved.refusal) return { success: false, error: resolved.refusal };
+      if (resolved.notes.length) args = [resolved.input, ...args.slice(1)] as never[];
       const before = editSession.timeline;
       runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
       try {
-        const output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
+        let output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
+        if (before !== editSession.timeline) recordSuccessors(before, editSession.timeline);
+        if (resolved.notes.length && output && typeof output === 'object' && !Array.isArray(output)) output = { ...(output as object), staleIds: resolved.notes.join(' ') } as typeof output;
         if (output?.staged === true) stagedTools.add(name);
         if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const moments = recipe().frames === 'sample' ? fastReelFrameMoments(name, before, editSession.timeline) : speechCutMoments(name, before, editSession.timeline);

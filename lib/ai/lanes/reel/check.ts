@@ -8,7 +8,7 @@ export function check(_context: LaneCheckContext): string[] {
 }
 
 /** A retained spoken word on the timeline. `heldEnd` is the provider's unshortened end, which may run on through trailing silence. */
-export type SpokenWord = { text: string; start: number; end: number; heldEnd?: number };
+export type SpokenWord = { text: string; start: number; end: number; heldEnd?: number; /** The source word: asset and transcript index. */ word?: string };
 
 /** Retained words as addSubtitlesFromTranscript captions them: the same timing copy (provider words whose ends are
  * pulled back to measured quiet) and the same rule for which piece a word at a cut belongs to. Measuring captions
@@ -19,8 +19,8 @@ export function retainedSpeechWords(timeline: Timeline, assets: { _id: string; k
   const speechOf = (analysis: SpeechAnalysis) => { if (!copies.has(analysis)) copies.set(analysis, captionSpeech(analysis)); return copies.get(analysis); };
   const speech = timeline.clips.flatMap(clip => {
     if (clip.volume === 0 || !(clip.kind === 'audio' || clip.kind === 'video' && !clip.audioSeparated)) return [];
-    const analysis = assets.find(asset => asset._id === clip.assetId)?.analysis?.transcript ? assets.find(asset => asset._id === clip.assetId)?.analysis
-      : assets.find(asset => asset.audioAssetId === clip.assetId)?.analysis;
+    const owner = assets.find(asset => asset._id === clip.assetId)?.analysis?.transcript ? assets.find(asset => asset._id === clip.assetId) : assets.find(asset => asset.audioAssetId === clip.assetId);
+    const analysis = owner?.analysis;
     const provider = analysis?.transcript, measured = analysis && speechOf(analysis);
     if (!provider || !measured) return [];
     const { transcript, edges } = measured, aligned = transcript.words.length === provider.words.length, sourceEnd = sourceEndOf(clip);
@@ -29,7 +29,7 @@ export function retainedSpeechWords(timeline: Timeline, assets: { _id: string; k
       // A word reaching past the cut is shown only while its clip plays.
       const start = Math.max(word.start, clip.sourceStart), end = Math.max(start, Math.min(word.end, sourceEnd));
       const held = aligned ? Math.min(provider.words[index].end, sourceEnd) : end;
-      return [{ text: word.text, start: timelineTimeAtSource(clip, start), end: timelineTimeAtSource(clip, end), ...(held > end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}) }];
+      return [{ text: word.text, start: timelineTimeAtSource(clip, start), end: timelineTimeAtSource(clip, end), ...(held > end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}), word: `${owner!._id}:${index}` }];
     });
   });
   return [...new Map(speech.map(word => [`${word.start.toFixed(3)}:${word.end.toFixed(3)}:${word.text}`, word])).values()]
@@ -101,7 +101,10 @@ export function captionSyncFailures(
     const spoken = run.map(index => words[index]), last = spoken.at(-1)!, next = words[run.at(-1)! + 1];
     // A caption may hold through the trailing silence the provider attached to its last word, or until the next word starts.
     const latestEnd = Math.max(last.heldEnd ?? last.end, next && next.start - last.end <= .5 ? next.start : last.end);
-    if (options.checkTiming === false ? spoken[0].start >= end || last.end <= caption.start : Math.abs(caption.start - spoken[0].start) > tolerance || end < last.end - tolerance || end > latestEnd + tolerance) {
+    // An end that stops at the next caption on its track is right even when the last word sounds on a little past it
+    // (up to 0.4 s): the next caption has to start somewhere, and two captions never overlap.
+    const meetsNext = captions.some(other => other !== caption && trackOf(other) === trackOf(caption) && Math.abs(other.start - end) <= frame + 1e-6) && end >= last.end - .4;
+    if (options.checkTiming === false ? spoken[0].start >= end || last.end <= caption.start : Math.abs(caption.start - spoken[0].start) > tolerance || end < last.end - tolerance && !meetsNext || end > latestEnd + tolerance) {
       const blocker = timeline.clips.find(other => other.id !== caption.id && other.kind !== 'audio' && other.kind !== 'effect' && other.kind !== 'caption' && trackOf(other) === trackOf(caption) && other.start < Math.round(last.end * timeline.fps) / timeline.fps - 1e-7 && Math.round(spoken[0].start * timeline.fps) / timeline.fps < other.start + other.duration - 1e-7);
       sink.push(`${label} has the right words at the wrong time: they are spoken at ${spokenRange(spoken)}. Call setCaptionTiming {clipId: ${JSON.stringify(caption.id)}, start: ${seconds(spoken[0].start)}, end: ${seconds(last.end)}}.${blocker ? ` Clip ${blocker.id}${blocker.text ? ` ${JSON.stringify(blocker.text)}` : ''} (${seconds(blocker.start)}–${seconds(blocker.start + blocker.duration)} s) is on the same track inside that range: move it first (neighbouring captions make room on their own).` : ''}`);
       // Already reported with its caption; not also listed as a word without one.
@@ -117,4 +120,37 @@ export function captionSyncFailures(
     failures.push(`${missing.length} spoken ${missing.length === 1 ? 'word has' : 'words have'} no synchronized caption: ${missing.slice(0, MAX_LISTED_WORDS).map(word => `${JSON.stringify(word.text)} ${seconds(word.start)}–${seconds(word.end)} s`).join('; ')}${missing.length > MAX_LISTED_WORDS ? `; and ${missing.length - MAX_LISTED_WORDS} more` : ''}. Add each to the caption beside it (setCaptionTiming to include its time, then editText), or add a caption at those times.`);
   }
   return failures;
+}
+
+/** Captions follow their speech through an edit that moved footage (trim, move, join, closing gaps): each caption whose
+ *  words all still play is shifted by how far its first and last word moved, through setCaptionTiming's rules, so
+ *  neighbouring captions stay in order. A caption whose words were cut, or that sat over no speech, stays put. */
+export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1], retime: (timeline: Timeline, clipId: string, range: { start: number; end: number }) => Timeline): { timeline: Timeline; followed: string[] } {
+  if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [] };
+  const was = retainedSpeechWords(before, assets), now = retainedSpeechWords(after, assets);
+  if (!was.length || !now.length) return { timeline: after, followed: [] };
+  // A word played twice (footage reused) has no single new time: it never moves a caption.
+  const count = new Map<string, number>(), at = new Map<string, SpokenWord>();
+  for (const word of now) if (word.word) { count.set(word.word, (count.get(word.word) ?? 0) + 1); at.set(word.word, word); }
+  const frame = 1 / after.fps, moves: { id: string; start: number; end: number; delta: number }[] = [];
+  for (const caption of after.clips) {
+    if (caption.kind !== 'caption') continue;
+    const old = before.clips.find(clip => clip.id === caption.id);
+    // Only captions this edit did not already place.
+    if (!old || Math.abs(old.start - caption.start) > 1e-6 || Math.abs(old.duration - caption.duration) > 1e-6) continue;
+    const end = old.start + old.duration, inside = was.filter(word => { const middle = (word.start + word.end) / 2; return middle >= old.start - frame && middle < end + frame; });
+    if (!inside.length || inside.some(word => !word.word || count.get(word.word) !== 1)) continue;
+    const first = at.get(inside[0].word!)!, last = at.get(inside.at(-1)!.word!)!;
+    const startDelta = first.start - inside[0].start, endDelta = last.end - inside.at(-1)!.end;
+    if (Math.abs(startDelta) < frame / 2 && Math.abs(endDelta) < frame / 2) continue;
+    moves.push({ id: caption.id, start: Math.max(0, old.start + startDelta), end: Math.max(0, end + endDelta), delta: startDelta });
+  }
+  // Captions moving earlier go first from the left, later ones first from the right, so none runs into one still to move.
+  moves.sort((a, b) => (a.delta < 0 ? 0 : 1) - (b.delta < 0 ? 0 : 1) || (a.delta < 0 ? a.start - b.start : b.start - a.start));
+  let timeline = after;
+  const followed: string[] = [];
+  for (const move of moves) {
+    try { if (move.end - move.start >= frame) { timeline = retime(timeline, move.id, { start: move.start, end: move.end }); followed.push(move.id); } } catch { /* a caption that cannot follow stays; finish names it */ }
+  }
+  return { timeline, followed };
 }
