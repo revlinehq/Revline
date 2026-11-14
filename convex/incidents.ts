@@ -2,10 +2,10 @@ import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
-import { incidentArgs, incidentDeployment, incidentFingerprint, recordIncident } from './lib/incidents';
+import { incidentArgs, incidentDeployment, incidentFingerprint, recordIncident, recordToolError, type ToolErrorScope } from './lib/incidents';
 import { z } from 'zod';
 import { requireOwner, requireProject } from './lib/auth';
-import { incidentNormalized, incidentText, isAgentFiled, limitationIdentity, LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../lib/incidents';
+import { incidentNormalized, incidentText, isIssueFiled, ISSUE_FILED_KINDS, limitationIdentity, LIMITATION_CATEGORIES, LIMITATION_IMPACTS, TOOL_ERROR_CLASSES, TOOL_ERROR_IMPACTS, TOOL_ERROR_KINDS, type ToolErrorReport } from '../lib/incidents';
 
 export const reportIncident = internalMutation({ args: incidentArgs, handler: recordIncident });
 
@@ -46,6 +46,9 @@ export const reportAgent = internalMutation({ args: { ...runScope, toolName: v.s
 // limitation from any user is one row with a rising count, so the most frequent gaps are the ones patched first.
 const LIMITATIONS_PER_RUN = 3;
 const literals = <T extends string>(values: readonly [T, T, ...T[]]) => v.union(...values.map(value => v.literal(value)));
+const toolErrorReport = v.object({ toolName: v.string(), kind: literals(TOOL_ERROR_KINDS), errorClass: literals(TOOL_ERROR_CLASSES), message: v.string(), issues: v.optional(v.array(v.object({ path: v.string(), code: v.string() }))),
+  /** Already counted by this turn's step report: only its latest impact changes. */
+  counted: v.optional(v.boolean()) });
 export const reportLimitation = internalMutation({ args: {
   ...runScope, scopeId: v.string(), request: v.string(), limitation: v.string(), category: literals(LIMITATION_CATEGORIES), impact: literals(LIMITATION_IMPACTS),
   tool: v.optional(v.string()), workaround: v.optional(v.string()), wanted: v.optional(v.string()), lane: v.optional(v.string()), model: v.optional(v.string()),
@@ -75,10 +78,29 @@ export const reportRunner = internalMutation({ args: { ...runScope, message: v.s
   await requireProject(ctx, args.projectId, args.ownerId);
   return await recordIncident(ctx, { source: 'cloudflare-agent-runner', kind: 'runner-error', message: args.message, stack: args.stack, context: { location: 'cloudflare/agent-runner:turn' }, projectId: args.projectId, runId: args.runId, deployment: incidentDeployment() });
 } });
-export const reportMcp = internalMutation({ args: { ownerId: v.string(), projectId: v.optional(v.string()), toolName: v.string(), message: v.string(), stack: v.optional(v.string()) }, handler: async (ctx, args) => {
+export const reportMcp = internalMutation({ args: { ownerId: v.string(), projectId: v.optional(v.string()), toolName: v.string(), message: v.string(), stack: v.optional(v.string()), toolError: v.optional(toolErrorReport), taskId: v.optional(v.string()) }, handler: async (ctx, args) => {
   const id = args.projectId ? ctx.db.normalizeId('projects', args.projectId) : null;
   const projectId = id ? await requireProject(ctx, id, args.ownerId).then(() => id).catch(() => null) : null;
-  return await recordIncident(ctx, { source: 'mcp', kind: 'tool-failure', message: args.message, stack: args.stack, context: { location: 'convex/mcpActions:callTool', toolName: args.toolName }, ...(projectId ? { projectId } : {}), deployment: incidentDeployment() });
+  const incident = await recordIncident(ctx, { source: 'mcp', kind: 'tool-failure', message: args.message, stack: args.stack, context: { location: 'convex/mcpActions:callTool', toolName: args.toolName }, ...(projectId ? { projectId } : {}), deployment: incidentDeployment() });
+  // The same failure counted with in-app tool errors: an MCP task is the turn it is deduplicated within.
+  if (args.toolError) await recordToolErrors(ctx, { ownerId: args.ownerId, ...(projectId ? { projectId } : {}), ...(args.taskId ? { runId: args.taskId } : {}), surface: 'mcp', impact: 'recovered' }, [args.toolError]);
+  return incident;
+} });
+
+// Failed tool calls in an in-app assistant turn (lib/ai/tool-error-incidents.ts), sent beside each step's checkpoint and
+// again with the turn-failed impact when the turn fails. A recording problem is logged and never fails the caller.
+const TOOL_ERRORS_PER_CALL = 10;
+async function recordToolErrors(ctx: MutationCtx, scope: ToolErrorScope, reports: (ToolErrorReport & { counted?: boolean })[]) {
+  for (const report of reports.slice(0, TOOL_ERRORS_PER_CALL)) {
+    try { const { counted, ...fields } = report; await recordToolError(ctx, scope, { ...fields, toolName: report.toolName.slice(0, 64), message: report.message.slice(0, 2000), ...(report.issues ? { issues: report.issues.slice(0, 8) } : {}) }, counted === true); }
+    catch (error) { console.error(`[incidents] ${JSON.stringify({ event: 'tool-error-record-failed', toolName: report.toolName.slice(0, 64), error: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`); }
+  }
+}
+export const reportToolErrors = internalMutation({ args: { ...runScope, impact: literals(TOOL_ERROR_IMPACTS), errors: v.array(toolErrorReport) }, returns: v.null(), handler: async (ctx, args) => {
+  const project = await ctx.db.get(args.projectId);
+  if (!project || project.ownerId !== args.ownerId) return null;
+  await recordToolErrors(ctx, { ownerId: args.ownerId, projectId: args.projectId, runId: args.runId, surface: 'editor', impact: args.impact }, args.errors);
+  return null;
 } });
 
 // What the web app files (lib/incident-client.ts and its callers). Anything else is labelled a generic client report.
@@ -178,7 +200,7 @@ export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents')
 } });
 
 // Separate leases on the same durable incident row; old listeners cannot claim these.
-export const issueQueue = query({ args: { ...credentials, paginationOpts: paginationOptsValidator, kind: v.optional(v.union(v.literal('agent-report'), v.literal('agent-limitation'))) }, handler: async (ctx, args) => {
+export const issueQueue = query({ args: { ...credentials, paginationOpts: paginationOptsValidator, kind: v.optional(literals(ISSUE_FILED_KINDS)) }, handler: async (ctx, args) => {
   authorize(args.secret);
   return await ctx.db.query('incidents').withIndex('by_kind', q => q.eq('kind', args.kind ?? 'agent-report')).paginate(args.paginationOpts);
 } });
@@ -186,7 +208,7 @@ export const claimIssue = mutation({ args: { ...claimed, backfill: v.boolean() }
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
   const now = Date.now();
-  if (!row || !isAgentFiled(row.kind) || row.generation !== args.generation || (row.issueUrl && (row.issueDeliveredCount ?? 0) >= row.count) ||
+  if (!row || !isIssueFiled(row.kind) || row.generation !== args.generation || (row.issueUrl && (row.issueDeliveredCount ?? 0) >= row.count) ||
     (row.issueAttempts === undefined && !args.backfill) || (row.issueAttempts ?? 0) >= 5 || (row.issueNextAttempt ?? 0) > now ||
     (row.issueDelivery === 'claimed' && (row.issueClaimedAt ?? 0) > now - 600_000)) return false;
   await ctx.db.patch(row._id, { issueDelivery: 'claimed', issueClaimToken: args.claimToken, issueClaimedAt: now, issueAttempts: (row.issueAttempts ?? 0) + 1 });
@@ -195,7 +217,7 @@ export const claimIssue = mutation({ args: { ...claimed, backfill: v.boolean() }
 export const finishIssue = mutation({ args: { ...claimed, issueUrl: v.optional(v.string()), count: v.number() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (!row || !isAgentFiled(row.kind) || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
+  if (!row || !isIssueFiled(row.kind) || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
   if (args.issueUrl && !/^https:\/\/github\.com\/(?:revlinehq\/Revline|zuraHQ\/(?:Revline|revline-editor))\/issues\/[1-9]\d*$/.test(args.issueUrl)) throw new ConvexError('Invalid incident issue');
   await ctx.db.patch(row._id, args.issueUrl ? { issueUrl: args.issueUrl, issueDeliveredCount: args.count, issueDelivery: 'finished', issueAttempts: 0, issueNextAttempt: undefined } :
     { issueDelivery: 'failed', issueNextAttempt: Date.now() + Math.min(3600_000, 60_000 * 2 ** (row.issueAttempts ?? 1)) });

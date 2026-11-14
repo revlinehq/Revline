@@ -5,8 +5,8 @@ import { setTimeout } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import { api } from '../../convex/_generated/api';
-import { AGENT_FILED_KINDS } from '../../lib/incidents';
-import { FORMAT, ISSUE_KINDS, LIMITATION_LABEL, publicIssue } from './public-issue';
+import { ISSUE_FILED_KINDS, isToolErrorKind } from '../../lib/incidents';
+import { FORMAT, ISSUE_KINDS, ISSUE_LABELS, publicIssue, toolErrorDue } from './public-issue';
 import { publisherConfig, githubToken, repo, run } from './shared';
 
 const { values } = parseArgs({ options: {
@@ -34,17 +34,18 @@ function mayCreate(issues: Issue[], ours: (issue: Issue) => boolean) {
 async function github(args: string[]) {
   return await run('gh', args, { env: { ...process.env, GH_TOKEN: await githubToken() }, timeout: 60_000, maxBuffer: 32_000_000 });
 }
-// The label is created once with its color and description. An existing label answers 422; any other
+// Each label is created once with its color and description. An existing label answers 422; any other
 // failure is tried again before the next new issue (GitHub still adds a plain label on create).
-let labelReady = false;
-async function ensureLabel() {
-  if (labelReady) return;
-  labelReady = await github(['api', '--method', 'POST', `repos/${repo}/labels`, '-f', `name=${LIMITATION_LABEL.name}`, '-f', `color=${LIMITATION_LABEL.color}`, '-f', `description=${LIMITATION_LABEL.description}`]).then(() => true, error => /422|already_exists/.test(String((error as { stderr?: unknown })?.stderr ?? '')));
+const labelsReady = new Set<string>();
+async function ensureLabels(names: string[]) {
+  for (const label of ISSUE_LABELS.filter(item => names.includes(item.name) && !labelsReady.has(item.name))) {
+    if (await github(['api', '--method', 'POST', `repos/${repo}/labels`, '-f', `name=${label.name}`, '-f', `color=${label.color}`, '-f', `description=${label.description}`]).then(() => true, error => /422|already_exists/.test(String((error as { stderr?: unknown })?.stderr ?? '')))) labelsReady.add(label.name);
+  }
 }
 async function writeIssue(issueUrl: string | undefined, row: Row) {
   const { title, body, labels } = publicIssue(row, deployment);
   // Labels are set only when the issue is created: an update must not remove labels a maintainer added while triaging.
-  if (!issueUrl && labels.length) await ensureLabel();
+  if (!issueUrl && labels.length) await ensureLabels(labels);
   const { stdout } = await github(['api', '--method', issueUrl ? 'PATCH' : 'POST', issueUrl ? `repos/${repo}/issues/${issueUrl.split('/').at(-1)}` : `repos/${repo}/issues`, '-f', `title=${title}`, '-f', `body=${body}`, ...(issueUrl ? [] : labels.flatMap(label => ['-f', `labels[]=${label}`]))]);
   return issueSchema.parse(JSON.parse(stdout));
 }
@@ -64,7 +65,7 @@ try {
     issues.push(issue);
   };
   let stopped = false;
-  for (const kind of AGENT_FILED_KINDS) {
+  for (const kind of ISSUE_FILED_KINDS) {
   if (stopped) break;
   const MARKER = ISSUE_KINDS[kind].marker;
   let cursor: string | null = null;
@@ -74,6 +75,7 @@ try {
   let dispatchReady = 0;
   let scrubbed = 0;
   let deferred = 0;
+  let belowThreshold = 0;
   let missing = 0;
   let ambiguous = false;
   let unsupported = false;
@@ -109,6 +111,8 @@ try {
         }
         continue;
       }
+      // A tool error is filed only once it repeats (public-issue.ts); a filed one is kept up to date from then on.
+      if (isToolErrorKind(kind) && !row.issueUrl && !toolErrorDue(row)) { belowThreshold++; continue; }
       eligible++;
       if (values.preview && !values.deliver && eligible <= limit) console.info(JSON.stringify(publicIssue(row, deployment)));
       if (!values.deliver || attempted >= limit) continue;
@@ -143,7 +147,7 @@ try {
     cursor = page.isDone ? null : page.continueCursor;
     if (ambiguous) break;
   } while (cursor);
-  console.info(JSON.stringify(unsupported ? { deployment, kind, skipped: 'Could not read this kind’s queue; the backend may predate it. Deploy the backend first.' } : { deployment, kind, dryRun: !values.deliver, backfill: values.backfill, eligible, limit, attempted, delivered, scrubbed, deferred, missing, dispatchReady }));
+  console.info(JSON.stringify(unsupported ? { deployment, kind, skipped: 'Could not read this kind’s queue; the backend may predate it. Deploy the backend first.' } : { deployment, kind, dryRun: !values.deliver, backfill: values.backfill, eligible, limit, attempted, delivered, scrubbed, deferred, missing, dispatchReady, ...(isToolErrorKind(kind) ? { belowThreshold } : {}) }));
   // A create that may have succeeded stops every kind until the next pass reconciles.
   if (ambiguous) stopped = true;
   }

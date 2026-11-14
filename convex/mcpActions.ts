@@ -3,6 +3,8 @@ import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { safely } from './lib/safely';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { argumentKey } from '../lib/ai/step-timing';
+import { failedResultReport, thrownClass } from '../lib/ai/tool-error-incidents';
+import { toolInputIssues, type ToolErrorReport } from '../lib/incidents';
 import { MAX_SHEET_FRAMES, evenly } from '../lib/ai/frame-sampling';
 import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilities } from '../lib/ai/lanes';
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
@@ -107,6 +109,27 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
 const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))), structuredContent: v.optional(v.any()) });
 type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[]; structuredContent?: Record<string, unknown> };
 const result = (value: unknown, isError = false): CallResult => ({ text: typeof value === 'string' ? value : JSON.stringify(value), isError });
+/** What made a failed call fail, kept beside its result for the tool-error incident; never sent to the client.
+ * null: not a tool error at all (the user pressed Stop). */
+const failureKinds = new WeakMap<CallResult, Pick<ToolErrorReport, 'kind' | 'errorClass' | 'issues'> | null>();
+function invalidArguments(error: z.ZodError, prefix = 'Invalid arguments: '): CallResult {
+  const output = result(`${prefix}${z.prettifyError(error)}`, true);
+  failureKinds.set(output, { kind: 'tool-input-invalid', errorClass: 'input-invalid', issues: toolInputIssues(error) ?? [] });
+  return output;
+}
+function thrownResult(error: unknown, output: CallResult): CallResult {
+  failureKinds.set(output, { kind: 'tool-error', errorClass: thrownClass(error) });
+  return output;
+}
+/** The tool-error incident for a failed call: its arguments refused, a thrown error, or the tool's own refusal. */
+function mcpToolError(toolName: string, output: CallResult, text: string): ToolErrorReport | undefined {
+  const known = failureKinds.get(output);
+  if (known !== undefined) return known ? { toolName, message: text, ...known } : undefined;
+  let value: unknown;
+  // A plain sentence is the tool's refusal; a result object is judged as in an in-app turn (some refusals are not errors).
+  try { value = JSON.parse(output.text); } catch { return { toolName, kind: 'tool-error', errorClass: 'refusal', message: text }; }
+  return value && typeof value === 'object' && !Array.isArray(value) ? failedResultReport(toolName, value) : { toolName, kind: 'tool-error', errorClass: 'refusal', message: text };
+}
 const failed = (value: unknown) => !!value && typeof value === 'object' && (value as { success?: unknown }).success === false;
 const message = (error: unknown) => {
   const data = (error as { data?: unknown })?.data;
@@ -210,7 +233,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
         await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId:target,lane:session.lane,laneChosen:session.laneChosen});
       }
     }
-    if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: toolFailureMessage(output.text) }).catch(() => {});
+    if (output.isError) { const text = toolFailureMessage(output.text), toolError = mcpToolError(args.name, output, text); await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: text, ...(toolError ? { toolError } : {}), ...(session ? { taskId: session.taskId } : {}) }).catch(() => {}); }
     // Looking at the saved timeline clears the task's queued changed frames, as the app's getFrames does.
     if (session && args.name === 'getFrames' && !output.isError && input.revision === undefined && input.projectId === session.projectId && typeof input.timelineId === 'string') {
       let read: { revision?: unknown; frames?: unknown } = {};
@@ -223,7 +246,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
       return result({ ...loaded, tools: capabilityTools(input.name), next: 'These tools are already in tools/list and now run for this task. The primary task and its completion checks are unchanged.' });
     }
     return output;
-  } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
+  } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined, toolError: { toolName: args.name, kind: 'tool-error', errorClass: thrownClass(error), message: message(error) }, ...(session ? { taskId: session.taskId } : {}) }).catch(() => {}); return result(message(error), true); }
   } catch(error){return result(message(error),true);}
   finally{
     // Where an MCP task's time went: the tool name and how long the call took, nothing of what was asked (lib/ai/step-timing.ts).
@@ -236,7 +259,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
 
 async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToolName, raw: Record<string, unknown>): Promise<CallResult> {
   const parsed = PROJECT_TOOLS[name].inputSchema.safeParse(raw);
-  if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
+  if (!parsed.success) return invalidArguments(parsed.error);
   const input = parsed.data as Record<string, never>;
   switch (name) {
     case 'startTask': case 'setLane': throw new Error('Lane tools require the task dispatcher.');
@@ -362,7 +385,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const known = editorTools(ctx, catalogOptions()).tools[name];
   if (!known) return result(`Unknown tool ${name}.`, true);
   const parsed = known.inputSchema.safeParse(rawInput);
-  if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
+  if (!parsed.success) return invalidArguments(parsed.error);
 
   if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, laneSession,agentName);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
@@ -384,7 +407,10 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     return withImages(published ? await toolkit.publicationResult(output) : output, failed(output));
   } catch (error) {
     const stopped=abortSignal.aborted&&!deadline.aborted;
-    return {...result(stopped ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true), ...(stopped?{ended:true}:{})};
+    if (!stopped) return thrownResult(error, result(message(error), true));
+    const output: CallResult = { ...result('Stopped in the editor before this edit finished. Saved edits remain.', true), ended: true };
+    failureKinds.set(output, null);
+    return output;
   } finally {
     clearInterval(watch);
     // Releasing the lock must not replace this call's result: a saved edit reported as failed is retried and applied twice.
