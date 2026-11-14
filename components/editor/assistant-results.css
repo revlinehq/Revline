@@ -20,16 +20,23 @@
 .run-steps-heading:hover>span:first-of-type{color:#fff}
 .run-steps-mark{width:16px;height:16px;flex:none;color:#3FB27F}
 .run-steps-heading[data-tone=running] .run-steps-mark,.run-steps-heading[data-tone=stopped] .run-steps-mark{color:var(--muted-foreground)}
-.run-steps-heading[data-tone=error] .run-steps-mark{color:#c3853c}
+.run-steps-heading[data-tone=error] .run-steps-mark{color:#b8925a}
 .run-step-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 0 7px;padding:2px 0 2px 15px;border-left:1px solid #ffffff1f}
 .run-step{display:flex;flex-direction:column;min-width:0}
 .run-step-line{display:flex;align-items:center;gap:10px;min-width:0}
 .run-step-mark{width:14px;height:14px;flex:none;color:#3FB27F}
 .run-step:is([data-state=running],[data-state=stopped]) .run-step-mark{color:var(--muted-foreground)}
-.run-step[data-state=error] .run-step-mark{color:#d9a15a}
+.run-step[data-state=error] .run-step-mark{color:#b8925a}
 .run-step-label{flex:none;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--foreground) 88%,transparent)}
 .run-step-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
-.run-step-reason{margin:2px 0 0 24px;font-size:12px;line-height:1.45;color:#d9a15a;overflow-wrap:anywhere}
+.run-step-reason{margin:2px 0 0 24px;font-size:12px;line-height:1.45;color:var(--muted-foreground);overflow-wrap:anywhere}
+.run-step-toggle{width:100%;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;outline:none}
+.run-step-toggle:hover .run-step-label{color:var(--foreground)}
+.run-step-short-reason{flex:1}
+.run-steps-chevron{width:14px;height:14px;flex:none;color:var(--muted-foreground)}
+.run-steps-heading:hover .run-steps-chevron,.run-steps-earlier:hover .run-steps-chevron{color:var(--foreground)}
+.run-steps-earlier{display:flex;align-items:center;gap:6px;width:fit-content;padding:0 0 0 24px;border:0;background:none;color:var(--muted-foreground);font:inherit;cursor:pointer;outline:none}
+.run-steps-earlier:hover{color:var(--foreground)}
 /* Six 9:16 frames fit the chat width (about 46 x 82), 6 px apart; landscape frames go four to a line. */
 .run-frame-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px 6px;max-width:306px;margin:8px 0 2px 24px}
 .run-frame-grid.is-landscape{grid-template-columns:repeat(4,minmax(0,1fr))}
