@@ -10,6 +10,11 @@ export type RetainedSourceWindow = RetainedSourceRange & { clipId: string };
 const epsilon = 1e-7, joinEpsilon = 1e-6;
 const seconds = (value: number) => `${Math.round(value * 1000) / 1000}`;
 const span = (range: RetainedSourceRange) => `${seconds(range.start)}–${seconds(range.end)} s`;
+const ms = (value: number) => Math.round(value * 1000) / 1000;
+/** Footage a requested range may spill past the retained source and still be reported as a plain edge clamp: a few frames. */
+export const CLAMP_TOLERANCE = .1;
+/** A requested range trimmed to the retained source: what was asked, what was kept, and how much fell outside. */
+export type RetainedRangeClamp = { range: number; requested: RetainedSourceRange; applied: RetainedSourceRange[]; outsideSeconds: number; beyondTolerance?: true };
 const sameRamp = (a: Clip, b: Clip) => !a.speedRamp?.length === !b.speedRamp?.length;
 
 /** The pieces an earlier cut left of this clip's source: the clip plus the clips of the same source that
@@ -36,7 +41,10 @@ export function retainedSourceWindows(timeline: Timeline, clipId: string): Retai
  * to frames; `exact` takes measured edges to the millisecond, as speech cleanup needs. Either way the kept
  * pieces are laid out on the timeline's frame grid (lib/editor/frame-grid.ts): each boundary is rounded once
  * to the nearest frame from the running exact position, so rounding never accumulates and a measured edge
- * moves by at most half a frame. A piece shorter than MIN_CUT_FRAMES is dropped and reported in `dropped`. */
+ * moves by at most half a frame. A piece shorter than MIN_CUT_FRAMES is dropped and reported in `dropped`.
+ * A requested range is clamped to the retained source (intersected with the retained pieces): footage an earlier cut
+ * removed, or that lies outside the clip, is simply not kept, and each trimmed range is reported in `clamped`. Only a
+ * range with nothing retained inside it is refused. */
 export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: RetainedSourceRange[], newId: () => string = () => crypto.randomUUID(), exact = false, minFrames = MIN_CUT_FRAMES) {
   const clip = timeline.clips.find(member => member.id === clipId);
   if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) throw new Error('Choose an existing video or audio clip.');
@@ -44,11 +52,14 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
   if (!ranges.length || ranges.length > 100) throw new Error('Choose between 1 and 100 retained source ranges.');
   const frame = 1 / timeline.fps, minimum = minFrames * frame, dropped: RetainedSourceRange[] = [], own = { start: clip.sourceStart, end: sourceEndOf(clip) };
   const fits = (range: RetainedSourceRange, window: RetainedSourceRange) => range.start >= window.start - epsilon && range.end <= window.end + epsilon;
-  // A request inside the named clip cuts only that clip; its neighbours join in when a range reaches them.
-  const pieces = ranges.every(range => fits(range, own)) || !clip.assetId ? [clip] : retainedPieces(timeline, clip);
+  // Every piece an earlier cut left of this source; a range is clamped to them, never refused for spilling past one.
+  const all = clip.assetId ? retainedPieces(timeline, clip) : [clip], allWindows = all.map(piece => ({ start: piece.sourceStart, end: sourceEndOf(piece) }));
+  const clampTo = (range: RetainedSourceRange) => allWindows.map(window => ({ start: Math.max(range.start, window.start), end: Math.min(range.end, window.end) })).filter(part => part.end - part.start > joinEpsilon);
+  // A request whose retained footage is inside the named clip cuts only that clip; its neighbours join in when a range reaches them.
+  const pieces = ranges.every(range => [range.start, range.end].every(Number.isFinite) && clampTo(range).every(part => fits(part, own))) ? [clip] : all;
   const windows = pieces.map(piece => ({ start: piece.sourceStart, end: sourceEndOf(piece) }));
-  const allowed = windows.map(span).join(', ');
-  const kept: RetainedSourceRange[][] = pieces.map(() => []);
+  const allowed = allWindows.map(span).join(', ');
+  const kept: RetainedSourceRange[][] = pieces.map(() => []), clamped: RetainedRangeClamp[] = [];
   let previousEnd = -Infinity;
   ranges.forEach((range, index) => {
     const name = `Range ${index + 1} (${[range.start, range.end].every(Number.isFinite) ? span(range) : 'not a number'})`;
@@ -56,13 +67,15 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     if (range.end <= range.start) throw new Error(`${name} ends before it starts.`);
     if (range.start < previousEnd - epsilon) throw new Error(`${name} starts before range ${index} ends (${seconds(previousEnd)} s). Ranges must be in source order and must not overlap.`);
     previousEnd = range.end;
-    // A range may run across pieces that still join in the source; anything between pieces was removed.
+    // Anything between pieces was removed by an earlier cut and anything outside them is not on the timeline: it is clamped away.
     const parts = windows.map(window => ({ start: Math.max(range.start, window.start), end: Math.min(range.end, window.end) }));
     const covered = parts.reduce((total, part) => total + Math.max(0, part.end - part.start), 0);
-    if (covered < range.end - range.start - joinEpsilon * pieces.length) {
-      const removed = windows.slice(1).map((window, at) => ({ start: Math.max(range.start, windows[at].end), end: Math.min(range.end, window.start) })).filter(gap => gap.end - gap.start > joinEpsilon);
-      const restore = 'this tool never brings footage back: restore it first with restoreClip (or undoLatestEdit for the latest cut), then cut again in one call.';
-      throw new Error(`${name} is outside this clip’s retained source (${allowed}). ${removed.length ? `${removed.map(span).join(', ')} was removed by an earlier cut and ${restore}` : `Footage outside ${windows.length > 1 ? 'those windows' : 'that window'} is not on the timeline and ${restore}`}`);
+    if (covered <= joinEpsilon) throw new Error(`${name} has no retained footage of this clip inside it (retained: ${allowed}). This tool never brings footage back: restore it first with restoreClip (or undoLatestEdit for the latest cut), then cut again in one call.`);
+    const applied = parts.filter(part => part.end - part.start > joinEpsilon);
+    if (covered < range.end - range.start - .001) {
+      // How much fell outside the retained source, beyond a frame-sized edge tolerance: that much the caller may have wanted back.
+      const outside = range.end - range.start - covered;
+      clamped.push({ range: index + 1, requested: { start: ms(range.start), end: ms(range.end) }, applied: applied.map(part => ({ start: ms(part.start), end: ms(part.end) })), outsideSeconds: ms(outside), ...(outside > CLAMP_TOLERANCE ? { beyondTolerance: true } : {}) });
     }
     let length = 0;
     parts.forEach((part, at) => {
@@ -85,7 +98,6 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     pairs.set(piece.id, pair); selected.add(pair.id);
   });
   if (timeline.clips.some(member => isTransitionClip(member) && member.transition && (selected.has(member.transition.fromClipId) || selected.has(member.transition.toClipId)))) throw new Error('Remove this clip’s connected transition before retaining source ranges.');
-  const ms = (value: number) => Math.round(value * 1000) / 1000;
   // Clip-local seconds of each kept part, through the piece's constant speed or speed ramp.
   const offsets = pieces.map((piece, at) => {
     const local: RetainedSourceRange[] = [];
@@ -102,7 +114,7 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     return local;
   });
   if (!kept.some(parts => parts.length)) throw new Error(`Every range is shorter than ${minFrames} timeline frame${minFrames === 1 ? '' : 's'} (${seconds(minimum)} s): a cut never leaves a piece that short.`);
-  if (pieces.length === 1 && offsets[0].length === 1 && offsets[0][0].start === 0 && offsets[0][0].end === clip.duration) return { timeline, dropped, ranges: [{ clipId: clip.id, ...(clip.linkedClipId ? { linkedClipId: clip.linkedClipId } : {}), sourceStart: clip.sourceStart, sourceEnd: own.end, start: clip.start, duration: clip.duration }] };
+  if (pieces.length === 1 && offsets[0].length === 1 && offsets[0][0].start === 0 && offsets[0][0].end === clip.duration) return { timeline, dropped, clamped, ranges: [{ clipId: clip.id, ...(clip.linkedClipId ? { linkedClipId: clip.linkedClipId } : {}), sourceStart: clip.sourceStart, sourceEnd: own.end, start: clip.start, duration: clip.duration }] };
   const ids = new Set(timeline.clips.map(member => member.id));
   const freshId = () => { const id = newId(); if (!id || ids.has(id)) throw new Error('Retained clips need unique IDs.'); ids.add(id); return id; };
   const cut = new Map<string, Clip[]>(), retained: RetainedRangeSummary[] = [];
@@ -128,5 +140,5 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     cut.set(piece.id, clips);
     if (piece.linkedClipId) cut.set(piece.linkedClipId, linked);
   });
-  return { timeline: { ...timeline, clips: timeline.clips.flatMap(member => cut.get(member.id) ?? [member]) }, ranges: retained, dropped };
+  return { timeline: { ...timeline, clips: timeline.clips.flatMap(member => cut.get(member.id) ?? [member]) }, ranges: retained, dropped, clamped };
 }

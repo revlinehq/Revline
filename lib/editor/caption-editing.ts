@@ -64,19 +64,55 @@ function convertTextCase(text:string,mode:NonNullable<CaptionStyleChanges['textC
   const lower=text.toLocaleLowerCase('en-US');
   return mode==='lower'?lower:lower.split('\n').map(line=>line.replace(/^(\P{L}*)(\p{L})/u,(_,prefix:string,letter:string)=>prefix+letter.toLocaleUpperCase('en-US'))).join('\n');
 }
-/** Edit a caption's absolute range on project frames, preserving its original animation phase. */
-export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):Timeline{
+/** What retiming a caption did to a neighbouring caption on its track to make room. */
+export type CaptionNeighbourChange={clipId:string;text:string;action:'trimmed'|'removed';from:{start:number;end:number};to?:{start:number;end:number};reason:string};
+const captionWords=(text:string)=>text.toLocaleLowerCase('en-US').split(/\s+/).map(word=>word.replace(/[^\p{L}\p{N}']/gu,'')).filter(Boolean);
+/** Whether every word of `inner` (as a multiset, ignoring case and punctuation) is in `outer`. */
+function wordsInside(inner:string,outer:string){
+  const pool=new Map<string,number>();for(const word of captionWords(outer))pool.set(word,(pool.get(word)??0)+1);
+  const words=captionWords(inner);
+  return words.length>0&&words.every(word=>{const left=pool.get(word)??0;if(!left)return false;pool.set(word,left-1);return true;});
+}
+/** Edit a caption's absolute range on project frames, preserving its original animation phase. Neighbouring captions on
+ *  its track make room: an overlapped edge is trimmed (a moved start keeps its animation phase), and a neighbour left with
+ *  less than a frame, or covered, is removed only when all its words are in this caption's text. A neighbour that would
+ *  lose words, or another kind of clip on the track, is never changed: the call is refused naming it. */
+export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{start?:number;end?:number}):{timeline:Timeline;neighbours:CaptionNeighbourChange[]}{
   timeline=normalizeTimeline(timeline);const clip=caption(timeline,clipId);
   if(changes.start===undefined&&changes.end===undefined)throw new Error('Specify a caption start or end.');
   const requestedStart=changes.start??clip.start,requestedEnd=changes.end??clip.start+clip.duration;
   if(![requestedStart,requestedEnd].every(Number.isFinite)||requestedStart<0||requestedEnd<0)throw new Error('Caption times must be finite and nonnegative.');
-  const start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps,duration=end-start;
-  if(duration<1/timeline.fps-1e-7)throw new Error('A caption must last at least one frame.');
-  const blocker=timeline.clips.find(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7);
-  // Name the neighbour and its range: the fix is to retime it first, and the caller cannot guess which clip it is.
-  if(blocker)throw new Error(`The caption range overlaps another clip on its V track. ${blocker.kind==='caption'?'Caption':'Clip'} ${blocker.id}${blocker.text?` ${JSON.stringify(blocker.text.slice(0,60))}`:''} occupies ${blocker.start.toFixed(2)}–${(blocker.start+blocker.duration).toFixed(2)} s. Retime that clip first, or keep this caption outside it.`);
+  const frame=1/timeline.fps,start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps,duration=end-start;
+  if(duration<frame-1e-7)throw new Error('A caption must last at least one frame.');
+  const overlapping=timeline.clips.filter(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7);
+  const name=(other:Clip)=>`${other.kind==='caption'?'Caption':'Clip'} ${other.id}${other.text?` ${JSON.stringify(other.text.slice(0,60))}`:''} (${other.start.toFixed(2)}–${(other.start+other.duration).toFixed(2)} s)`;
+  // Only captions make room; any other clip on the track is the caller's to move.
+  const blocker=overlapping.find(other=>other.kind!=='caption');
+  if(blocker)throw new Error(`The caption range overlaps another clip on its V track: ${name(blocker)}. Move that clip first, or keep this caption outside it.`);
+  const text=clip.text??'',neighbours:CaptionNeighbourChange[]=[],replaced=new Map<string,Clip|null>();
+  const round=(value:number)=>Math.round(value*1000)/1000;
+  for(const other of overlapping){
+    const otherEnd=other.start+other.duration,from={start:round(other.start),end:round(otherEnd)},said=wordsInside(other.text??'',text);
+    // What is left of the neighbour before and after the new range.
+    const before=Math.max(0,start-other.start),after=Math.max(0,otherEnd-end);
+    if(before>=frame-1e-7&&after>=frame-1e-7)throw new Error(`The new range sits inside ${name(other)}, which would have to be split. Retime that caption first, or choose a range that starts or ends outside it.`);
+    if(before<frame-1e-7&&after<frame-1e-7||said&&Math.max(before,after)<other.duration/2){
+      // Covered, or mostly covered by a caption that now says its words: it goes. Words this caption does not say never go.
+      if(!said)throw new Error(`The new range covers ${name(other)}, and this caption's text does not include its words, so removing it would lose them. Put its words into this caption with editText first, or retime that caption.`);
+      neighbours.push({clipId:other.id,text:other.text??'',action:'removed',from,reason:'its words are in the retimed caption'});replaced.set(other.id,null);continue;
+    }
+    if(before>=frame-1e-7){
+      // The neighbour runs into the new range from the left: its end comes back to the new start.
+      const next={...other,duration:start-other.start};validateClipEffects(next);replaced.set(other.id,next);
+      neighbours.push({clipId:other.id,text:other.text??'',action:'trimmed',from,to:{start:round(next.start),end:round(start)},reason:'its end overlapped the retimed caption'});
+    }else{
+      // From the right: its start moves to the new end, keeping its animation phase.
+      const next={...other,...offsetClipMotion(other,end-other.start),start:end,duration:otherEnd-end};validateClipEffects(next);replaced.set(other.id,next);
+      neighbours.push({clipId:other.id,text:other.text??'',action:'trimmed',from,to:{start:round(end),end:round(otherEnd)},reason:'its start overlapped the retimed caption'});
+    }
+  }
   const next={...clip,...offsetClipMotion(clip,start-clip.start),start,duration};validateClipEffects(next);
-  return {...timeline,clips:timeline.clips.map(item=>item.id===clipId?next:item)};
+  return {timeline:{...timeline,clips:timeline.clips.flatMap(item=>item.id===clipId?[next]:replaced.has(item.id)?(replaced.get(item.id)?[replaced.get(item.id)!]:[]):[item])},neighbours};
 }
 
 /** Saved speech per source asset, as `captionSpeech` returns it. */

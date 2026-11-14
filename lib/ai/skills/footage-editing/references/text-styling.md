@@ -20,7 +20,7 @@ Good text is readable at a glance, clear of faces and app controls, and styled t
 | Animation, including Word reveal and Pop-in words | setTextAnimation |
 | Highlight or accent color of a template | configureTextTemplate |
 | Copy one caption's look to others | applyCaptionStyle |
-| Caption start/end | setCaptionTiming |
+| Caption start/end (neighbouring captions are trimmed to make room; one whose words are all in the retimed caption is removed) | setCaptionTiming |
 | Words | editText |
 
 ## Rules
