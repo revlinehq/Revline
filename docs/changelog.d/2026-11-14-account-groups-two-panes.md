@@ -1,0 +1,1 @@
+- Connected accounts: groups and accounts now sit in two panes; pick a group on the left, tick its accounts on the right, with reconnect and connect on the same page. Why: the founder found the group cards from #431 hard to use and picked this layout.

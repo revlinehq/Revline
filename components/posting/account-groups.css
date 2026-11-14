@@ -1,13 +1,85 @@
-/* Account groups on the Connected accounts page (account-groups.tsx). */
-.account-groups { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
-.account-groups-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.account-groups-head h2, .account-groups-title { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.3; }
-.account-groups-title .dash-list-meta { margin-left: 8px; font-weight: 400; }
-.account-groups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-.account-group-name { flex: 1; min-width: 0; }
-.account-group-name [data-slot=input] { height: 34px; font-size: 15px; }
-.account-group-add[data-slot=button] { height: 32px; padding: 0 12px; border-radius: var(--radius-md); }
+/* The Connected accounts page (accounts-page.tsx): its heading, and the two panes of groups and accounts (account-groups.tsx). */
+.accounts-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; margin-bottom: 8px; }
+.accounts-head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 1.25; letter-spacing: -.01em; }
+.accounts-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.accounts-count { color: var(--dash-muted); font-size: 14px; }
+
+.group-list .group-list-item[data-slot=button]:focus-visible { outline: none; box-shadow: none; }
+
+/* One container, split: the groups on the left, the picked group's accounts on the right. */
+.group-panes[data-slot=card] { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 0; padding: 0; min-height: 520px; font-size: 14px; }
+.group-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 16px 10px; border-right: 1px solid var(--dash-divider); }
+.group-list-label { padding: 0 10px 8px; color: var(--dash-muted); font-size: 13px; }
+.group-list .group-list-item[data-slot=button] { justify-content: flex-start; gap: 10px; width: 100%; height: auto; min-height: 56px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--dash-text); font-weight: 400; text-align: left; white-space: normal; transition: none; }
+.group-list .group-list-item[data-slot=button]:hover { background: var(--dash-pill-quiet); }
+.group-list .group-list-item[data-slot=button][aria-current] { background: var(--dash-pill); }
+.group-list .group-list-item[data-slot=button]:active { transform: none; }
+.group-list-item[aria-current] .group-avatars .account-avatar [data-slot=avatar] { box-shadow: 0 0 0 2px var(--dash-pill); }
+.group-list-item .group-avatars .account-avatar [data-slot=avatar] { width: 26px; height: 26px; box-shadow: 0 0 0 2px var(--dash-card); }
+.group-list-item .group-avatars .account-avatar + .account-avatar { margin-left: -4px; }
+.group-list-item .group-avatars .account-avatar [data-slot=avatar-fallback] { font-size: 9px; letter-spacing: -.02em; }
+.group-list-name { flex: 1; min-width: 0; font-size: 15px; }
+.group-list-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.group-list-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-list-name small { display: block; color: var(--dash-muted); font-size: 13px; }
+.group-list-star { width: 13px; height: 13px; flex-shrink: 0; fill: currentColor; }
+.group-list .group-list-new[data-slot=button] { justify-content: flex-start; height: 40px; margin-top: 4px; padding: 0 10px; gap: 8px; border-radius: 10px; color: var(--dash-text-soft); font-size: 15px; font-weight: 400; }
+.group-list .group-list-new[data-slot=button]:hover { background: var(--dash-pill-quiet); color: var(--dash-text); }
+
+.group-pane { display: flex; flex-direction: column; min-width: 0; padding: 16px 20px 12px; }
+.group-pane > .dash-error { margin: 0 0 8px; }
+.group-pane-head { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 8px; }
+.group-pane-title { margin: 0; font-size: 16px; font-weight: 500; }
+.group-pane-name { position: relative; flex: 0 1 320px; min-width: 0; }
+.group-pane-name [data-slot=input] { height: 42px; padding: 0 38px 0 14px; border-color: var(--dash-border); background: transparent; font-size: 16px; font-weight: 500; }
+.group-pane-name [data-slot=input]:hover { border-color: #ffffff1f; }
+.group-pane-name > svg { position: absolute; top: 50%; right: 13px; width: 15px; height: 15px; translate: 0 -50%; color: var(--dash-muted); cursor: text; }
+.group-pane-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.group-pane .group-pane-delete[data-slot=button] { height: 34px; padding: 0 10px; gap: 7px; border-radius: var(--radius-md); color: var(--dash-text-soft); font-size: 14px; font-weight: 400; }
+.group-pane .group-pane-delete[data-slot=button]:hover, .group-pane .group-pane-delete[data-confirm] { background: var(--dash-pill-quiet); color: #d98a76; }
+.account-group-star[data-slot] { display: inline-grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: var(--radius-md); color: var(--dash-muted); }
+.account-group-star[data-slot]:hover { background: var(--dash-pill-quiet); color: var(--dash-text); }
+.account-group-star svg { width: 16px; height: 16px; }
 .account-group-star[data-on] { color: var(--dash-text); }
 .account-group-star[data-on] svg { fill: currentColor; }
-.dash-menu .account-group-delete[data-slot=dropdown-menu-item], .dash-menu .account-group-delete[data-slot=dropdown-menu-item] svg { color: #d98a76; }
-@media (max-width: 760px) { .account-groups-grid { grid-template-columns: minmax(0, 1fr); } }
+.account-group-tip[data-slot=tooltip-content] { animation: none; }
+
+/* An account: picture, handle and platform, then its state, the group it is in elsewhere, the tick and its menu. */
+.group-pane-row { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: 60px; padding: 8px 4px 8px 12px; border-radius: 10px; }
+.group-pane-row:hover { background: var(--dash-pill-quiet); }
+.group-chip { flex-shrink: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 9px; border-radius: 6px; background: var(--dash-pill); color: var(--dash-muted); font-size: 12px; }
+.group-pane-row [data-slot=checkbox] { width: 20px; height: 20px; border-radius: 5px; border-color: #ffffff3d; background: transparent; box-shadow: none; transition: none; }
+.group-pane-row [data-slot=checkbox][data-state=checked] { border-color: var(--dash-accent); background: var(--dash-accent); color: #fff; }
+.group-pane-row [data-slot=checkbox]:focus-visible { outline: none; box-shadow: none; }
+.group-pane-row [data-slot=checkbox] svg { width: 14px; height: 14px; }
+.group-pane-row .dash-more[data-slot] { width: 28px; height: 28px; }
+.group-pane-note { margin: 0; padding: 12px; color: var(--dash-muted); }
+.group-pane-connect { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding: 12px 6px 0; border-top: 1px solid var(--dash-divider); }
+.account-connect-button[data-slot=button] { height: 32px; padding: 0 10px; gap: 6px; border-radius: var(--radius-md); color: var(--dash-muted); font-size: 13px; }
+.account-connect-button[data-slot=button]:hover { background: var(--dash-pill-quiet); color: var(--dash-text); }
+.account-connect-button[data-slot=button] svg { width: 14px; height: 14px; }
+
+/* A phone: the groups become a row of choices above the accounts. */
+@media (max-width: 760px) {
+  .group-panes[data-slot=card] { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .group-list { flex-direction: row; gap: 6px; overflow-x: auto; padding: 12px; border-right: 0; border-bottom: 1px solid var(--dash-divider); scrollbar-width: none; }
+  .group-list-label, .group-list .group-avatars, .group-list-name small { display: none; }
+  .group-list .group-list-item[data-slot=button], .group-list .group-list-new[data-slot=button] { flex-shrink: 0; width: auto; min-height: 36px; height: 36px; margin: 0; padding: 0 14px; border-radius: 9999px; background: var(--dash-pill-quiet); font-size: 14px; }
+  .group-list-name { font-size: 14px; }
+  .group-pane { padding: 12px 8px 10px; }
+  .group-pane-head { flex-wrap: wrap; padding: 0 4px; }
+  .group-pane-name { flex: 1 1 200px; }
+  .group-pane .group-pane-delete[data-slot=button] { padding: 0 8px; }
+  .group-pane-row { gap: 10px; padding-left: 8px; }
+  .group-chip { max-width: 96px; }
+}
+@media (max-width: 640px) {
+  .accounts-head h1 { font-size: 22px; }
+  /* A broken sign-in's Reconnect takes a second line under the handle, so the tick stays in line with the others. */
+  .group-pane-row[data-expired] { flex-wrap: wrap; row-gap: 6px; }
+  .group-pane-row .dash-list-row-name { flex: 1 1 0; min-width: 0; }
+  .group-pane-row .group-pane-reconnect { order: 10; margin-left: 42px; }
+  .group-pane-row[data-expired] .dash-list-state { display: none; }
+  /* The icon carries the state. */
+  .group-pane .account-state-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
