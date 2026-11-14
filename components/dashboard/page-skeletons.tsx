@@ -3,7 +3,8 @@
 // The pages show the same placeholders themselves while their data loads, so nothing shifts when they take over.
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AccountsSkeleton } from '@/components/posting/accounts-page';
+import { AccountsHeader } from '@/components/posting/accounts-page';
+import { PanesSkeleton } from '@/components/posting/account-groups';
 import { PostsHeaderSkeleton, PostsWeekSkeleton } from '@/components/posting/posts-calendar';
 import { StatsRowsSkeleton } from '@/components/stats/stats-page';
 import { ChatRowsSkeleton } from '@/components/workspace/chat-history';
@@ -29,8 +30,8 @@ export function PostsPageSkeleton() {
 
 export function AccountsPageSkeleton() {
   return <main className="dash-content"><div className="dash-column">
-    <p className="dash-column-note">Revline posts your clips to the accounts you connect here.</p>
-    <AccountsSkeleton />
+    <AccountsHeader><Skeleton className="h-9 w-[168px] rounded-md" /></AccountsHeader>
+    <PanesSkeleton />
   </div></main>;
 }
 

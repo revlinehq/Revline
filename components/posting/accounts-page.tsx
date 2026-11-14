@@ -1,29 +1,25 @@
 'use client';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
+import { Plug } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
 import { atLimit, limitMessage } from '@/lib/posting/account-caps';
-import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
+import { PLATFORM_NAMES, POSTING_PLATFORMS } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { AccountAvatar, PlatformIcon } from './account-avatar';
-import { AccountGroups } from './account-groups';
+import { PlatformIcon } from './account-avatar';
+import { GroupPanes, PanesSkeleton, type AccountActions } from './account-groups';
 import '@/components/dashboard/dash-list.css';
 
-/** Connected social accounts, a card per platform: connect, reconnect, disconnect. While posting is not set up on the server, one line says so and the Connect and Reconnect buttons are off. */
-/** A card per platform, still, while the platforms and accounts load. */
-export function AccountsSkeleton() {
-  return <div className="contents" role="status" aria-label="Loading your accounts">{Array.from({ length: 3 }, (_, index) => <Card key={index} variant="dash" className="dash-list">
-    <div className="dash-list-head"><Skeleton className="size-[18px]" /><Skeleton className="h-4 w-24" /><div className="dash-list-actions"><Skeleton className="h-8 w-[84px] rounded-full" /></div></div>
-    <div className="dash-list-row"><Skeleton className="h-4 w-44" /></div>
-  </Card>)}</div>;
+/** Connected social accounts: the groups and every account in two panes (account-groups.tsx), where accounts are also connected, reconnected and disconnected. While posting is not set up on the server, one line says so and the Connect and Reconnect buttons are off. */
+
+/** The page's heading, with Connect account to its right. */
+export function AccountsHeader({ children }: { children?: ReactNode }) {
+  return <header className="accounts-head"><h1>Connected accounts</h1><div className="accounts-head-actions">{children}</div></header>;
 }
 
 /**
@@ -64,6 +60,7 @@ export function AccountsPage() {
   const allowance = useQuery(api.posting.accountAllowance, isAuthenticated ? {} : 'skip');
   // The limit counts every platform together. At or above it (after a downgrade) nothing new connects; what is connected stays and keeps posting.
   const full = !allowance || atLimit(allowance.connected, allowance.limit);
+  const live = (platform: PostingPlatform) => !!platforms?.find(entry => entry.platform === platform)?.live;
   const startConnect = useAction(api.postingActions.startConnect), disconnect = useMutation(api.posting.disconnect);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   /** Connecting and reconnecting are the same round trip: the platform's consent screen, then back here. `accountId`: the account being reconnected. */
@@ -81,37 +78,22 @@ export function AccountsPage() {
     catch (reason) { setError(userError(reason, 'Could not disconnect this account.')); }
     finally { setBusy(null); }
   }
+  const canConnect = (platform: PostingPlatform) => live(platform) && !busy && !full;
+  const actions: AccountActions = { live, canConnect, busy: !!busy, connect: (platform, accountId) => void connect(platform, accountId), disconnect: accountId => void remove(accountId) };
   return <main className="dash-content"><div className="dash-column">
-    <h1 className="sr-only">Connected accounts</h1>
+    <AccountsHeader>
+      {allowance && <span className="accounts-count">{allowance.limit === null ? allowance.connected : `${allowance.connected} of ${allowance.limit}`} connected</span>}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button data-slot="button" variant="soft" disabled={!platforms?.some(entry => entry.live) || full || !!busy}><Plug />Connect account</Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="dash-menu group-menu">{POSTING_PLATFORMS.map(platform => <DropdownMenuItem key={platform} disabled={!canConnect(platform)} onSelect={() => void connect(platform)}>
+          <PlatformIcon platform={platform} /><span>{PLATFORM_NAMES[platform]}</span>
+        </DropdownMenuItem>)}</DropdownMenuContent>
+      </DropdownMenu>
+    </AccountsHeader>
     {allowance && atLimit(allowance.connected, allowance.limit) && platforms?.some(entry => entry.live) && <p className="dash-column-note" role="note">{limitMessage(allowance.limit)}</p>}
     {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">Posting isn’t set up yet.</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}
-    {accounts && accounts.length > 0 && <AccountGroups accounts={accounts} />}
-    {accounts && accounts.length > 0 && <h2 className="account-groups-title">Accounts{allowance && <span className="dash-list-meta">{allowance.limit === null ? allowance.connected : `${allowance.connected} of ${allowance.limit}`}</span>}</h2>}
-    {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
-      const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
-      return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">
-        <div className="dash-list-head">
-          <PlatformIcon platform={platform} /><h2>{name}</h2>
-          <span className="dash-list-meta">{own.length ? `${own.length} ${own.length === 1 ? 'account' : 'accounts'}` : ''}</span>
-          <div className="dash-list-actions"><Button variant="soft" size="sm" disabled={!live || !!busy || full} aria-label={`Connect a ${name} account`} onClick={() => void connect(platform)}>Connect</Button></div>
-        </div>
-        {own.map(account => <div key={account.id} className="dash-list-row">
-          <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} />
-          <span className="dash-list-row-name">@{account.username}{account.status === 'needs_reconnect' && account.error && !/expired/i.test(account.error) && <small>{account.error}</small>}</span>
-          {account.status === 'needs_reconnect'
-            ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />{/expired/i.test(account.error ?? 'expired') ? 'Sign-in expired' : 'Reconnect needed'}</span>
-            : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
-          {/* Signing in again renews this account in place: new tokens, name and picture. It is the main action only when the sign-in is broken. */}
-          <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
-          </DropdownMenu>
-        </div>)}
-        {!own.length && <div className="dash-list-row dash-list-note">No accounts connected yet.</div>}
-      </Card>;
-    })}
+    {!platforms || !accounts ? <PanesSkeleton /> : <GroupPanes accounts={accounts} actions={actions} />}
   </div></main>;
 }
