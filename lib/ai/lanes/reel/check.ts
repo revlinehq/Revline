@@ -3,6 +3,7 @@ import type { Timeline } from '../../../editor/types';
 import { sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
 import { trackOf } from '../../../editor/types';
 import { footageGaps } from '../../../editor/frame-grid';
+import { updateCaptionTiming, type CaptionNeighbourChange } from '../../../editor/caption-editing';
 import { captionSpeech, wordInSource, type SpeechAnalysis } from '../../../editor/transcript-captions';
 export function check(_context: LaneCheckContext): string[] {
   return [];
@@ -131,10 +132,10 @@ export function captionSyncFailures(
  *  setCaptionTiming's rules, so neighbouring captions stay in order. A caption that was already out of step with the
  *  speech stays put (moving it would carry the drift along). A caption left over footage that was deleted, sitting over a
  *  gap this edit closed and over none of its words now, is removed and reported: it would otherwise caption other words. */
-export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1], retime: (timeline: Timeline, clipId: string, range: { start: number; end: number }) => Timeline): { timeline: Timeline; followed: string[]; stranded: { clipId: string; text: string }[] } {
-  if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [], stranded: [] };
+export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1]): { timeline: Timeline; followed: string[]; stranded: { clipId: string; text: string }[]; trimmed: CaptionNeighbourChange[] } {
+  if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [], stranded: [], trimmed: [] };
   const was = retainedSpeechWords(before, assets), now = retainedSpeechWords(after, assets);
-  if (!was.length || !now.length) return { timeline: after, followed: [], stranded: [] };
+  if (!was.length || !now.length) return { timeline: after, followed: [], stranded: [], trimmed: [] };
   const plain = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const frame = 1 / after.fps, within = (words: SpokenWord[], start: number, end: number) => words.filter(word => { const middle = (word.start + word.end) / 2; return middle >= start - frame && middle < end + frame; });
   const says = (text: string, words: SpokenWord[]) => !!plain(text) && words.length > 0 && plain(words.map(word => word.text).join(' ')).includes(plain(text));
@@ -163,9 +164,17 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
   let timeline = stranded.length ? { ...after, clips: after.clips.filter(clip => !stranded.some(item => item.clipId === clip.id)) } : after;
   // Captions moving earlier go first from the left, later ones first from the right, so none runs into one still to move.
   moves.sort((a, b) => (a.delta < 0 ? 0 : 1) - (b.delta < 0 ? 0 : 1) || (a.delta < 0 ? a.start - b.start : b.start - a.start));
-  const followed: string[] = [];
+  const followed: string[] = [], trimmed: CaptionNeighbourChange[] = [], pending = new Set(moves.map(move => move.id));
   for (const move of moves) {
-    try { if (move.end - move.start >= frame) { timeline = retime(timeline, move.id, { start: move.start, end: move.end }); followed.push(move.id); } } catch { /* a caption that cannot follow stays; finish names it */ }
+    pending.delete(move.id);
+    if (move.end - move.start < frame) continue;
+    // A caption out of step with its words (say, half over deleted footage) is trimmed to make room; one is never removed,
+    // and a caption still to follow is never trimmed.
+    try {
+      const retimed = updateCaptionTiming(timeline, move.id, { start: move.start, end: move.end });
+      if (retimed.neighbours.some(item => item.action === 'removed' || pending.has(item.clipId))) continue;
+      timeline = retimed.timeline; followed.push(move.id); trimmed.push(...retimed.neighbours);
+    } catch { /* a caption that cannot follow stays; finish names it */ }
   }
-  return { timeline, followed, stranded };
+  return { timeline, followed, stranded, trimmed };
 }

@@ -431,7 +431,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return read;
   };
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
-    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [], stranded: { clipId: string; text: string }[] = [];
+    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [], stranded: { clipId: string; text: string }[] = [], trimmedCaptions: CaptionNeighbourChange[] = [];
     await refreshAfterRecovery();
     const result = await editSession.checkpoint(timeline => {
     let edited = edit(timeline);
@@ -441,8 +441,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const footageMoved = edited.clips.some(clip => (clip.kind === 'video' || clip.kind === 'audio') && ((old) => !old || old.start !== clip.start || old.duration !== clip.duration || old.sourceStart !== clip.sourceStart)(oldMedia.get(clip.id))) || [...oldMedia.keys()].some(id => !newIds.has(id));
     if (footageMoved && !RESTORING_TOOLS.some(name => runningTools.has(name))) {
       // A follow never trims or removes another caption: only an edge under a frame into a neighbour stops at it.
-      const follow = followSpeechCaptions(timeline, edited, assets, (t, clipId, range) => { const retimed = updateCaptionTiming(t, clipId, range); if (retimed.neighbours.length) throw new Error('neighbour'); return retimed.timeline; });
-      edited = follow.timeline; followed = follow.followed; stranded = follow.stranded;
+      const follow = followSpeechCaptions(timeline, edited, assets);
+      edited = follow.timeline; followed = follow.followed; stranded = follow.stranded; trimmedCaptions = follow.trimmed;
     }
     const grid = onFrameGrid(edited, timeline); healed = grid.healed;
     // The edit that opens a hole says so in its own result, not three finish checks later.
@@ -461,7 +461,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // An older media processor has no emoji font: say so with the edit instead of leaving a "NO GLYPH" box to be found in a frame.
     // Only for an edit that wrote the emoji text, so moves and trims of that caption stay quiet.
     const emoji = emojiText && !await processorCan(ctx, 'render:emoji');
-    return { ...result, ...(followed.length || stranded.length ? { captionsFollowed: followed.length, captionNote: [followed.length ? `${followed.length} caption${followed.length === 1 ? '' : 's'} moved with ${followed.length === 1 ? 'its' : 'their'} spoken words.` : '', stranded.length ? `Removed ${stranded.length} caption${stranded.length === 1 ? '' : 's'} left over deleted footage, in a gap this edit closed: ${stranded.map(item => JSON.stringify(item.text)).join(', ')}.` : ''].filter(Boolean).join(' ') } : {}), ...(stranded.length ? { removedCaptions: stranded } : {}), ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
+    return { ...result, ...(followed.length || stranded.length || trimmedCaptions.length ? { captionsFollowed: followed.length, captionNote: [followed.length ? `${followed.length} caption${followed.length === 1 ? '' : 's'} moved with ${followed.length === 1 ? 'its' : 'their'} spoken words.` : '', trimmedCaptions.length ? `Trimmed ${trimmedCaptions.map(item => JSON.stringify(item.text)).join(', ')} to make room.` : '', stranded.length ? `Removed ${stranded.length} caption${stranded.length === 1 ? '' : 's'} left over deleted footage, in a gap this edit closed: ${stranded.map(item => JSON.stringify(item.text)).join(', ')}.` : ''].filter(Boolean).join(' ') } : {}), ...(stranded.length ? { removedCaptions: stranded } : {}), ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
   };
   const markerCheckpoint = async (edit: (timeline: Timeline) => Timeline) => {
     const result = await checkpoint(edit);
