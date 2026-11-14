@@ -433,6 +433,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
     let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false, followed: string[] = [], stranded: { clipId: string; text: string }[] = [], trimmedCaptions: CaptionNeighbourChange[] = [];
     await refreshAfterRecovery();
+    // Transcripts load on first use: captions can follow their words only once the words are here.
+    if (editSession.timeline.clips.some(clip => clip.kind === 'caption')) await loadSavedSpeech().catch(() => undefined);
     const result = await editSession.checkpoint(timeline => {
     let edited = edit(timeline);
     // Captions follow their words when footage moved (trim, move, join, closing gaps), so none is fixed one at a time later.
