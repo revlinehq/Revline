@@ -14,7 +14,7 @@ import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { SPEECH_EDIT_ORDER, WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { NoSuchToolError, wrapLanguageModel, type ModelMessage } from "ai";
+import { InvalidToolInputError, NoSuchToolError, wrapLanguageModel, type ModelMessage } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -204,6 +204,9 @@ For edit requests, use one brief initial sentence stating the requested action, 
           // A real tool that this step withholds gets the same next step an MCP agent is given, not the SDK's
           // "unavailable tool" line and a list of ninety names.
           experimental_repairToolCall: async ({ toolCall, error }) => {
+            // Input the schema refused: the field and what to change, in plain words, never the SDK's JSON dump of the value
+            // and schema issues, which a model repeats unchanged.
+            if (InvalidToolInputError.isInstance(error) && Object.hasOwn(tools, toolCall.toolName)) throw new Error(invalidToolInputGuidance(toolCall.toolName, error));
             if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
             // Model-facing guidance, so a plain sentence: the chat reads this one by its text (lib/ai/failure-text).
             throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
@@ -376,6 +379,17 @@ function unfinishedSummary(steps: readonly { content: readonly unknown[] }[], ch
   const ids = unresolvedToolFailureIds(steps);
   const tools = [...new Set(steps.flatMap(step => step.content.flatMap(value => { const part = value as { type?: string; toolCallId?: string; toolName?: string } | null; return part && part.type !== 'tool-call' && part.toolCallId && ids.has(part.toolCallId) && part.toolName ? [part.toolName] : []; })))];
   return tools.length ? `These steps did not complete: ${tools.slice(0, 5).join(', ')}.` : 'Some requested steps did not complete.';
+}
+/** A refused tool input as the fields to change: each schema issue's path and its message, read from the error's causes. */
+function invalidToolInputGuidance(name: string, error: unknown) {
+  let issues: { path?: readonly PropertyKey[]; message?: string; keys?: readonly string[] }[] | undefined;
+  for (let cause: unknown = error, depth = 0; cause && typeof cause === 'object' && depth < 5 && !issues; cause = (cause as { cause?: unknown }).cause, depth++) {
+    const found = (cause as { issues?: unknown }).issues;
+    if (Array.isArray(found)) issues = found;
+  }
+  const path = (keys: readonly PropertyKey[] = []) => keys.reduce<string>((text, key) => typeof key === 'number' ? `${text}[${key}]` : text ? `${text}.${String(key)}` : String(key), '') || 'input';
+  const lines = (issues ?? []).slice(0, 6).map(issue => `${path(issue.path)}: ${issue.keys?.length ? `drop ${issue.keys.join(', ')} (not a field of this tool)` : issue.message ?? 'invalid'}`);
+  return `${name} was not run: its input was refused. ${lines.length ? lines.join('; ') : 'It does not match the tool schema'}. Change only that and call ${name} again; the same input is refused again.`;
 }
 /** Why a known tool is not callable in this step, and the call that makes it so. */
 function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {

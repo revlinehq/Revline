@@ -24,6 +24,7 @@ export const BASE_TOOLS = [
   'moveClips',
   'resizeClips',
   'swapClips',
+  'joinClips',
   'setBlendMode',
   'undoLatestEdit',
   'listRevisions',

@@ -1,0 +1,1 @@
+- Editor assistant: cuts clamp to retained footage, caption retimes make room, stale reads and clip ids refresh themselves, captions follow moved speech, and the new joinClips rejoins split pieces with their sound in sync. Why: the founder's talking-head run hit refusals on sensible calls and could not rejoin clips he had split.

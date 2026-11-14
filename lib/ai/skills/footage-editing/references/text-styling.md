@@ -20,8 +20,8 @@ Good text is readable at a glance, clear of faces and app controls, and styled t
 | Animation, including Word reveal and Pop-in words | setTextAnimation |
 | Highlight or accent color of a template | configureTextTemplate |
 | Copy one caption's look to others | applyCaptionStyle |
-| Caption start/end | setCaptionTiming |
-| Words | editText |
+| Caption start/end (an edge under a frame into a neighbour stops at it; larger overlaps trim the neighbour, and one whose words are all in the retimed caption is removed) | setCaptionTiming |
+| Words, or words and range together | editText (start/end retime it in the same call) |
 
 ## Rules
 - Change animation with setTextAnimation only when the user asks for an animation change.
