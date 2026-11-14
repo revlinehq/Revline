@@ -26,7 +26,7 @@ const TURN_FUNCTIONS = new Set([
   'assistant:videoUnavailable', 'assistant:recordVideoUnavailable',
   'pixelTracks:referenceForRun', 'pixelTracks:pageForRun',
   // Posting tools: reads of the run owner's own accounts and posts. Their writes go through toolWrites:run.
-  'assistantPosting:accounts', 'assistantPosting:accountPlatforms', 'assistantPosting:preview', 'assistantPosting:list', 'assistantPosting:get', 'postingActions:tiktokCreatorFor',
+  'assistantPosting:accounts', 'assistantPosting:groups', 'assistantPosting:groupTargets', 'assistantPosting:accountPlatforms', 'assistantPosting:preview', 'assistantPosting:list', 'assistantPosting:get', 'postingActions:tiktokCreatorFor',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
   // Found by scripts/run-path-check.mjs: the face-measurement read asks what the processor can do, and a source read that outlasts one call is resumed by id.
   'mediaProcessor:capabilities', 'referenceReads:resumeFrames',
