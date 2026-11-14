@@ -1,0 +1,1 @@
+- Editor chat: a turn's steps are plain rows under "Ran N steps", frame reads show the frames they looked at in a grid, and the assistant's thinking moved to a shelf on top of the composer. Why: the founder's approved chat design; per-tool previews and in-list thinking made long turns hard to follow.

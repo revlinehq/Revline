@@ -29,3 +29,18 @@
 .conversation-editor .assistant-content .chat-assistant,.conversation-editor .assistant-content .chat-assistant :is(p,li,h3){font-size:14px;line-height:1.55}
 
 .assistant-queue{margin:0 0 10px;border:1px solid var(--ws-border,#ffffff12);border-radius:10px;max-height:180px;overflow:auto;font-size:12px}.assistant-queue-heading{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;color:var(--ws-muted)}.assistant-queue button{border:0;background:transparent;color:var(--ws-muted);cursor:pointer}.assistant-queued-message{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--ws-border,#ffffff12)}.assistant-queued-message>div{flex:1;min-width:0}.assistant-queued-message p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.assistant-queued-message small{color:#da968e}.assistant-queue-number{color:var(--ws-muted);font-variant-numeric:tabular-nums}.assistant-queued-message>button{width:28px;height:28px;flex:none;display:grid;place-items:center}.assistant-queue button:focus-visible{outline:none;outline-offset:2px}
+
+/* The thinking shelf: an inset tray on top of the composer, narrower than it, top corners rounded, bottom edge on the composer. */
+.thinking-shelf{display:flex;flex-direction:column;min-width:0;margin:0 14px;border:1px solid #333;border-bottom:0;border-radius:10px 10px 0 0;background:#222;font-size:12px;line-height:18px}
+.thinking-shelf-line{display:flex;align-items:center;gap:6px;width:100%;min-width:0;height:34px;padding:0 10px 0 12px;border:0;background:none;color:var(--muted-foreground);font:inherit;text-align:left;cursor:pointer;outline:none}
+.thinking-shelf-line:disabled{cursor:default}
+.thinking-shelf-line:not(:disabled):hover .thinking-shelf-chevron{color:var(--foreground)}
+.thinking-shelf-dot{width:6px;height:6px;flex:none;margin-right:2px;border-radius:999px;background:#bdbdbd}
+.thinking-shelf-title{flex:none;color:var(--foreground);font-weight:500}
+.thinking-shelf-activity{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thinking-shelf-time{flex:none;margin-left:auto;padding-left:6px;font-variant-numeric:tabular-nums}
+.thinking-shelf-chevron{width:14px;height:14px;flex:none;margin-left:auto;color:var(--muted-foreground)}
+.thinking-shelf-time+.thinking-shelf-chevron{margin-left:4px}
+.thinking-shelf-body{display:flex;flex-direction:column;gap:10px;max-height:33vh;overflow-y:auto;padding:0 12px 12px;color:#8f8f8f;font-size:12px;line-height:1.55}
+.thinking-shelf-body>p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.thinking-shelf-body>p:last-child{color:#c4c4c4}

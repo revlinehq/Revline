@@ -1,7 +1,8 @@
 'use client';
 import { AiUsageBanner } from '@/components/workspace/plan-usage';
-import { RunSteps, RunThought } from './run-activity';
-import { turnActivity } from './assistant-run';
+import { RunSteps } from './run-activity';
+import { ThinkingShelf } from './thinking-shelf';
+import { runWords, turnActivity } from './assistant-run';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { PostConfirmCard, postProposalOf } from './post-confirm-card';
 import { ExportConfirmCard, exportProposalOf } from './export-confirm-card';
@@ -185,6 +186,12 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       reportClientIncident({source:'editor-chat',kind:card.title==='Save not confirmed'?'save-confirmation':'turn-failure',message:`${card.title}: ${card.detail}`,context:{location:'components/editor/assistant-panel:failure-card',turnId:group.id}});
     }
   },[groups]);
+  // The current turn's reasoning shows in the shelf on top of the composer until the next message.
+  const currentTurn=externalAgent?undefined:groups.find(group=>group.id===turnId);
+  const shelfActive=!!currentTurn&&waiting;
+  const runningStep=currentTurn?.run.steps.findLast(step=>step.state==='running');
+  // While a step runs the line names it; between steps it shows the latest thought.
+  const shelfActivity=runningStep?(runningStep.plain?runningStep.name:runWords(runningStep.name)[0]):currentTurn?.run.latestThought||undefined;
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
@@ -250,8 +257,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
           </MessageScrollerItem>)}
           {(replies.length > 0 || editing || cards.length > 0) && <MessageScrollerItem messageId={`${turnKey(group.id)}-reply`} data-turn-id={group.id}>
             <Message><MessageContent className="gap-3">
-              {/* One Thought for all of the run's reasoning and one list of its steps, both collapsed; the reply follows. */}
-              <RunThought entries={run.thought} latest={run.latestThought} active={editing}/>
+              {/* The run's steps, then the reply. Its reasoning sits in the shelf on the composer, not here. */}
               <RunSteps steps={run.steps} active={editing}/>
               {run.reply.map(text => <AssistantResponseText key={text.key} text={text.text} streaming={text.streaming}/>)}
               {/* Cards that need the user stay open: they are part of the reply, not of the run. */}
@@ -281,7 +287,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     <div className="manual-composer-dock">
     {!demo&&<AiUsageBanner/>}
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    {currentTurn&&<ThinkingShelf key={turnKey(currentTurn.id)} entries={currentTurn.run.thought} activity={shelfActivity} active={shelfActive} startedAt={activityStartedAt}/>}
+    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : running ? 'Add a note while it works…' : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }
