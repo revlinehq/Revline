@@ -9,8 +9,8 @@
 .library-page [data-slot=button] { transition: none; }
 .library-page [data-slot=button]:active { transform: none; }
 
-/* Name or breadcrumb on the left, the quiet usage meter on the right. */
-.library-head { display: flex; align-items: center; gap: 16px; min-height: 24px; }
+/* Breadcrumb on the left; sort and filter, New folder and Upload on the right. */
+.library-head { display: flex; align-items: center; gap: 16px; min-height: 36px; }
 .library-crumbs [data-slot=breadcrumb-list] { gap: 8px; flex-wrap: wrap; color: var(--dash-muted); font-size: 15px; }
 .library-crumbs [data-slot=breadcrumb-item] { padding: 2px 6px; margin: -2px -6px; border-radius: 6px; }
 .library-crumbs [data-slot=breadcrumb-item][data-drop] { background: var(--dash-pill); color: var(--dash-text); }
@@ -55,28 +55,27 @@
 .storage-meter-link[data-slot=button] { height: auto; padding: 0; color: var(--dash-text); font-size: 13px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
 .storage-meter > .storage-meter-link[data-slot=button] { align-self: flex-start; margin: 0 10px; }
 
-.library-toolbar { display: flex; align-items: center; gap: 8px; }
-.library-search { position: relative; flex: 0 1 300px; min-width: 0; margin-right: auto; }
-.library-search svg { position: absolute; left: 12px; top: 50%; width: 15px; height: 15px; translate: 0 -50%; color: var(--dash-muted); pointer-events: none; }
-.library-search [data-slot=input] { height: 36px; padding-left: 36px; border-color: var(--dash-border); border-radius: var(--radius-md); background: var(--dash-card); font-size: 14px; }
-.library-search [data-slot=input]::placeholder { color: var(--dash-muted); }
-/* A menu trigger takes the trigger's data-slot, so the soft button look is repeated here. */
-.library-sort { height: 36px; padding: 0 12px; gap: 6px; border: 0; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500; }
-.library-sort:hover, .library-sort[data-state=open] { background: var(--dash-pill-hover); }
-.library-sort svg { width: 15px; height: 15px; color: var(--dash-muted); }
-/* The Archived view's switch, beside sort and filter: a soft button that stays lit while the view is open. */
-.library-archived-toggle[data-slot=toggle] { height: 36px; padding: 0 12px; gap: 6px; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500; box-shadow: none; outline: none; }
-.library-archived-toggle[data-slot=toggle]:hover { background: var(--dash-pill-hover); }
-.library-archived-toggle[data-slot=toggle][data-state=on] { background: #3A3A3A; }
-.library-archived-toggle svg { width: 15px; height: 15px; color: var(--dash-muted); }
-.library-archived-toggle[data-state=on] svg { color: var(--dash-text); }
+.library-toolbar { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* Sort and filter: a soft icon button that stays lit while a sort or filter other than the default is on. */
+.library-sort[data-slot=button] { width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-muted); }
+.library-sort[data-slot=button]:hover, .library-sort[aria-expanded=true] { background: var(--dash-pill-hover); color: var(--dash-text); }
+.library-sort[data-active] { background: #3A3A3A; color: var(--dash-text); }
+.library-sort svg, .library-toolbar [data-size=icon] svg { width: 16px; height: 16px; }
+/* The Archived view's switch, in the top bar (rendered there by the Library page): an icon that stays lit while the view is open. Its tooltip owns data-state, so the lit state reads aria-pressed. */
+.library-archived-toggle[data-slot=toggle] { width: 36px; min-width: 36px; height: 36px; padding: 0; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-muted); box-shadow: none; outline: none; transition: none; }
+.library-archived-toggle[data-slot=toggle]:hover { background: var(--dash-pill-hover); color: var(--dash-text); }
+.library-archived-toggle[data-slot=toggle][aria-pressed=true] { background: #3A3A3A; color: var(--dash-text); }
+.library-archived-toggle[data-slot=toggle]:focus-visible { outline: none; box-shadow: none; }
+.library-archived-toggle svg { width: 16px; height: 16px; }
+/* New folder and Upload sit in the top bar only on a phone. */
+.library-phone-action[data-slot=button] { display: none; }
+/* Tooltips on the icon buttons appear and leave in place. */
+.library-tip[data-slot=tooltip-content] { animation: none !important; }
 .library-crumbs .library-crumb-button { height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: var(--dash-muted); font-size: inherit; font-weight: inherit; line-height: inherit; }
 .library-crumbs .library-crumb-button:hover { background: none; color: var(--dash-text); }
 .library-folder[data-archived] .library-folder-link { cursor: default; }
 /* Toasts appear and leave in place: no slide or fade. */
 .library-toaster [data-sonner-toast] { transition: none !important; animation: none !important; }
-.library-view[data-slot=toggle-group] [data-slot=toggle-group-item] { width: 32px; padding: 0; }
-.library-view svg { width: 15px; height: 15px; }
 .library-menu [data-slot=dropdown-menu-radio-item] { min-height: 34px; border-radius: 8px; font-size: 14px; cursor: pointer; }
 .library-menu [data-slot=dropdown-menu-radio-item][data-highlighted] { background: var(--dash-pill); color: var(--dash-text); }
 .library-status { display: flex; align-items: center; gap: 12px; margin: 0; color: var(--dash-muted); font-size: 13px; }
@@ -148,25 +147,6 @@
 @media (hover: none) { .library-file-check[data-slot=checkbox], .library-folder .library-folder-more { opacity: 1; } }
 
 /* List view. */
-.library-table-card { overflow: hidden; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); }
-.library-table [data-slot=table-head] { height: 40px; color: var(--dash-muted); font-size: 13px; font-weight: 400; }
-.library-table :is([data-slot=table-head], [data-slot=table-cell]) { padding: 0 12px; border-color: var(--dash-divider); white-space: nowrap; }
-.library-table [data-slot=table-row] { border-color: var(--dash-divider); transition: none; }
-.library-table [data-slot=table-header] [data-slot=table-row]:hover { background: none; }
-.library-row[data-slot=table-row] { height: 52px; cursor: pointer; }
-.library-row[data-slot=table-row]:is(:hover, [data-active], [data-drop]) { background: var(--dash-tile); }
-.library-row [data-slot=table-cell] { color: var(--dash-text-soft); }
-.library-col-check { width: 40px; padding-left: 16px !important; padding-right: 0 !important; }
-.library-col-type { width: 86px; } .library-col-size { width: 92px; } .library-col-duration { width: 92px; } .library-col-date { width: 92px; } .library-col-more { width: 48px; }
-.library-col-used { width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
-.library-row-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.library-row-name .library-file-thumb { width: 46px; flex-shrink: 0; border-radius: 5px; background: var(--dash-pill); }
-.library-row-name .library-file-thumb > svg, .library-row-name .video-frame > svg { width: 14px; height: 14px; }
-.library-row-name .library-file-thumb[data-kind=folder] { background: none; color: var(--dash-text-soft); }
-.library-row-name .library-file-thumb[data-kind=folder] svg { width: 20px; height: 20px; fill: currentColor; }
-.library-row-name .library-wave { gap: 1px; }
-.library-row-name :is(a, [data-slot=button]) { display: block; min-width: 0; max-width: 300px; height: auto; padding: 0; border: 0; border-radius: 0; overflow: hidden; background: none; color: var(--dash-text); font-size: 14px; font-weight: 500; text-align: left; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.library-row-name [data-slot=button]:hover { background: none; }
 .library-more { display: flex; justify-content: center; margin-top: 8px; }
 
 /* Empty folder and empty Library. */
@@ -263,23 +243,15 @@
 
 @media (max-width: 900px) {
   .library-folders, .library-files { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .library-col-duration, .library-col-used { display: none; }
 }
-/* Phone: search on its own line, the meter beside the view switch, two tiles a row; New folder and Upload are in the navbar. */
+/* Phone: two tiles a row; New folder and Upload are in the navbar. */
 @media (max-width: 767px) {
   .library-page { gap: 14px; }
-  .library-toolbar { flex-wrap: wrap; }
-  .library-search { flex: 1 0 100%; margin: 0; order: -1; }
-  .library-search [data-slot=input] { height: 40px; }
   .library-desktop-action[data-slot=button] { display: none; }
-  .library-view { margin-left: auto; }
-  .library-archived-toggle[data-slot=toggle] { width: 36px; padding: 0; }
-  .library-archived-toggle span { display: none; }
+  .library-phone-action[data-slot=button] { display: inline-flex; }
   .library-head { flex-wrap: wrap; }
   .library-folders, .library-files { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .library-files { row-gap: 18px; }
-  .library-col-type, .library-col-date { display: none; }
-  .library-row-name :is(a, [data-slot=button]) { max-width: 44vw; }
   .library-upload { flex-wrap: wrap; row-gap: 4px; }
   .library-upload strong { flex: 1; max-width: none; }
   .library-bar { bottom: 12px; left: 50%; padding-left: 12px; }
