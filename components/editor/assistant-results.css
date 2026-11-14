@@ -9,6 +9,11 @@
 .assistant-result-card.result-error>svg{color:#c3853c}
 .assistant-result-card.result-prepared>svg{color:var(--muted-foreground);opacity:.6}
 @media(prefers-reduced-motion:reduce){.assistant-result-card .animate-spin{animation:none}}
+/* Live work shimmers: a light sweep about every 2 s across text and icons alike (a mask, so an SVG sweeps with the
+ * word beside it). Only on what is running now; none with reduced motion. Used by the thinking shelf and the step rows. */
+.chat-shimmer{-webkit-mask-image:linear-gradient(100deg,#000b 40%,#000 50%,#000b 60%);mask-image:linear-gradient(100deg,#000b 40%,#000 50%,#000b 60%);-webkit-mask-size:300% 100%;mask-size:300% 100%;animation:chat-shimmer 2s linear infinite}
+@keyframes chat-shimmer{from{-webkit-mask-position:100% 0;mask-position:100% 0}to{-webkit-mask-position:0 0;mask-position:0 0}}
+@media (prefers-reduced-motion:reduce){.chat-shimmer{animation:none;-webkit-mask-image:none;mask-image:none}}
 /* A run's steps: a heading, then plain rows under a thin left rule. Frame reads add a grid of what they looked at. */
 .run-steps{display:flex;flex-direction:column;min-width:0;font-size:13px;line-height:20px}
 .run-steps-heading{display:flex;align-items:center;gap:8px;width:fit-content;max-width:100%;padding:0;border:0;background:none;color:var(--foreground);font:inherit;text-align:left;cursor:pointer;outline:none}

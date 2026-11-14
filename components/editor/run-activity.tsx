@@ -9,7 +9,7 @@ import { assistantErrorDetail } from './assistant-turn-presentation';
 import { runWords, type RunStep } from './assistant-run';
 
 type Frame = { label: string; src: string; /** Where this frame sits on a contact sheet: its index among `of` tiles. */ tile?: { index: number; of: number } };
-type Row = { key: string; tool: string; plain: boolean; detail: string; state: RunStep['state']; reason?: string; count: number; frames: Frame[]; sheet: boolean };
+type Row = { key: string; tool: string; plain: boolean; detail: string[]; state: RunStep['state']; reason?: string; count: number; frames: Frame[]; sheet: boolean };
 
 /** Reads that look at frames; only these show a picture in the chat. */
 const FRAME_TOOLS = new Set(['getFrames', 'readFrames', 'inspectFrames']);
@@ -38,7 +38,7 @@ function detailOf(step: RunStep) {
     : start !== undefined ? range(start, finite(span.end) ? span.end : finite(input.duration) ? start + input.duration : start) : undefined;
   const text = ['title', 'text', 'look', 'preset', 'animation', 'mode', 'name'].map(key => input[key]).find((value): value is string => typeof value === 'string' && !!value.trim());
   const clips = Array.isArray(input.clipIds) && input.clipIds.length > 1 ? `${input.clipIds.length} clips` : undefined;
-  return [time, text ? short(text) : undefined, time && text ? undefined : clips].filter(Boolean).slice(0, 2).join(' · ');
+  return [time, text ? short(text) : undefined, time && text ? undefined : clips].filter((part): part is string => !!part).slice(0, 2);
 }
 
 /** The frames a frame read returned, each with its timecode. A contact sheet is one image for several times. */
@@ -63,10 +63,10 @@ function stepRows(steps: RunStep[]): Row[] {
   const rows: Row[] = [];
   for (const step of steps) {
     const frameRead = !step.plain && FRAME_TOOLS.has(step.name);
-    const detail = step.plain ? '' : detailOf(step), previous = rows.at(-1);
+    const detail = step.plain ? [] : detailOf(step), previous = rows.at(-1);
     if (!frameRead && previous && !previous.frames.length && !FRAME_TOOLS.has(previous.tool) && previous.tool === step.name && previous.state === 'done' && step.state === 'done') {
       previous.count++;
-      if (previous.detail !== detail) previous.detail = '';
+      if (previous.detail.join('\n') !== detail.join('\n')) previous.detail = [];
       continue;
     }
     const { frames, sheet } = frameRead && step.state === 'done' ? framesOf(step) : { frames: [], sheet: false };
@@ -129,8 +129,8 @@ function StepRow({ row }: { row: Row }) {
   return <div className="run-step" data-state={row.state}>
     <div className="run-step-line">
       <Mark className={`run-step-mark${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/>
-      <span className="run-step-label">{row.state === 'done' ? words[1] : words[0]}</span>
-      {(row.detail || row.count > 1 || row.state === 'stopped') && <span className="run-step-detail">{[row.detail, row.count > 1 ? `×${row.count}` : '', row.state === 'stopped' ? 'stopped' : ''].filter(Boolean).join(' · ')}</span>}
+      <span className={`run-step-label${row.state === 'running' ? ' chat-shimmer' : ''}`}>{row.state === 'done' ? words[1] : words[0]}</span>
+      {[...row.detail, row.count > 1 ? `×${row.count}` : '', row.state === 'stopped' ? 'stopped' : ''].filter(Boolean).map((part, index) => <span key={index} className="run-step-detail">{part}</span>)}
     </div>
     {row.reason && <p className="run-step-reason">{row.reason}</p>}
     {row.frames.length > 0 && <FrameGrid frames={row.frames} sheet={row.sheet}/>}
@@ -148,7 +148,7 @@ export function RunSteps({ steps, active }: { steps: RunStep[]; active: boolean 
   return <Collapsible className="run-steps" open={open} onOpenChange={setOpen}>
     <CollapsibleTrigger className="run-steps-heading" data-tone={active ? 'running' : failed ? 'error' : stopped ? 'stopped' : 'done'}>
       <Status className={`run-steps-mark${active ? ' animate-spin' : ''}`} aria-hidden="true"/>
-      <span>{active ? `Running ${n}` : stopped ? `Stopped after ${n}` : `Ran ${n}`}</span>
+      <span className={active ? 'chat-shimmer' : undefined}>{active ? `Running ${n}` : stopped ? `Stopped after ${n}` : `Ran ${n}`}</span>
       {failed > 0 && <span className="run-step-detail">{failed} failed</span>}
     </CollapsibleTrigger>
     <CollapsibleContent className="run-step-list" aria-label="Assistant steps">

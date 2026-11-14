@@ -107,12 +107,9 @@ function AssistantReplyHeader({ loading, active=loading, label, detail, startedA
   </div>;
 }
 
-function AssistantResponseText({ text, streaming }: { text: string; streaming: boolean }) {
-  const [receivedLive, setReceivedLive] = useState(streaming);
-  if (streaming && !receivedLive) setReceivedLive(true);
-  // Keep the last received chunks fading after Convex marks the message complete.
-  // A historical message mounts with this off, so opening a chat never replays it.
-  return <ChatProse text={text} animate={receivedLive || streaming} />;
+function AssistantResponseText({ text }: { text: string }) {
+  // Text shows as it arrives, with no fade.
+  return <ChatProse text={text} />;
 }
 
 function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,results,composerPlaceholder }: {
@@ -259,7 +256,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
             <Message><MessageContent className="gap-3">
               {/* The run's steps, then the reply. Its reasoning sits in the shelf on the composer, not here. */}
               <RunSteps steps={run.steps} active={editing}/>
-              {run.reply.map(text => <AssistantResponseText key={text.key} text={text.text} streaming={text.streaming}/>)}
+              {run.reply.map(text => <AssistantResponseText key={text.key} text={text.text}/>)}
               {/* Cards that need the user stay open: they are part of the reply, not of the run. */}
               {run.steps.flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={`ask-${step.key}`} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
               {run.steps.flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={`post-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}

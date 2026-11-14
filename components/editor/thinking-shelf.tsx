@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { Brain, ChevronDown, ChevronUp } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { ThoughtEntry } from './assistant-run';
 import { minutesSeconds } from './minutes-seconds';
@@ -47,9 +47,9 @@ export function ThinkingShelf({ entries, activity, active, startedAt }: { entrie
   return <Collapsible className="thinking-shelf" data-active={active || undefined} open={open && !!paragraphs.length} onOpenChange={setOpen}>
     <CollapsibleTrigger className="thinking-shelf-line" disabled={!paragraphs.length} aria-label={open ? 'Hide thinking' : 'Show thinking'}>
       {active ? <>
-        <span className="thinking-shelf-dot" aria-hidden="true"/>
-        <span className="thinking-shelf-title">Thinking</span>
-        {activity && !open && <span className="thinking-shelf-activity">· {activity}</span>}
+        {/* One sweep of light across the icon and the word while the turn runs (the founder asked for it). */}
+        <span className="thinking-shelf-label chat-shimmer"><Brain className="thinking-shelf-icon" aria-hidden="true"/><span className="thinking-shelf-title">Thinking</span></span>
+        {activity && !open && <span className="thinking-shelf-activity">{activity}</span>}
         <span className="thinking-shelf-time">{minutesSeconds(elapsed)}</span>
       </> : <span className="thinking-shelf-title">{thoughtFor !== null ? `Thought for ${spoken(thoughtFor)}` : 'Thought'}</span>}
       {!!paragraphs.length && <Chevron className="thinking-shelf-chevron" aria-hidden="true"/>}

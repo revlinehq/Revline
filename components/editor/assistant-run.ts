@@ -38,7 +38,7 @@ export function runWords(name: string): Words {
 
 /** A step of the run, keyed by where it ran. `plain` steps come from older conversations that stored a finished line, not a tool. */
 export type RunStep = ChatTool & { key: string; plain?: boolean };
-export type RunText = { key: string; text: string; streaming: boolean };
+export type RunText = { key: string; text: string };
 /** The run's reasoning in order: what it thought, what it said along the way, and the steps it took in between. */
 export type ThoughtEntry = { key: string; kind: 'thought' | 'note'; text: string } | { key: string; kind: 'steps'; labels: string[] };
 export type TurnActivity = { thought: ThoughtEntry[]; latestThought: string; steps: RunStep[]; reply: RunText[] };
@@ -49,20 +49,20 @@ const plainLine = (text: string) => text.replace(/[*_#`]/g, '').split(/\n+/).map
  * assistant said after its last step). `active` is whether the run is still working; a step without a result after
  * that was cut off, as was one the user's Stop ended. */
 export function turnActivity(replies: readonly ChatMessage[], active: boolean): TurnActivity {
-  type Part = { key: string; streaming: boolean } & ({ type: 'text' | 'thinking'; text: string } | { type: 'tools'; steps: RunStep[] });
+  type Part = { key: string } & ({ type: 'text' | 'thinking'; text: string } | { type: 'tools'; steps: RunStep[] });
   const parts: Part[] = [];
   for (const message of replies) {
     const blocks = message.blocks ?? [...(message.text ? [{ type: 'text' as const, text: message.text }] : []), ...(message.steps?.length ? [{ type: 'tools' as const, steps: message.steps }] : [])];
     blocks.forEach((block, index) => {
-      const key = `${message.id}-${index}`, streaming = message.status === 'streaming' && index === blocks.length - 1;
-      if (block.type === 'tools') parts.push({ type: 'tools', key, streaming, steps: block.steps.map((step, position) => ({ ...step, key: step.id ?? `${key}-${position}` })) });
-      else if (block.text.trim()) parts.push({ type: block.type, key, streaming, text: block.text });
+      const key = `${message.id}-${index}`;
+      if (block.type === 'tools') parts.push({ type: 'tools', key, steps: block.steps.map((step, position) => ({ ...step, key: step.id ?? `${key}-${position}` })) });
+      else if (block.text.trim()) parts.push({ type: block.type, key, text: block.text });
     });
     // Older conversations stored finished steps as lines already written for the chat.
-    if (message.tools?.length) parts.push({ type: 'tools', key: `${message.id}-tools`, streaming: false, steps: message.tools.map((name, position) => ({ key: `${message.id}-tools-${position}`, name, state: 'done', plain: true })) });
+    if (message.tools?.length) parts.push({ type: 'tools', key: `${message.id}-tools`, steps: message.tools.map((name, position) => ({ key: `${message.id}-tools-${position}`, name, state: 'done', plain: true })) });
   }
   const lastTools = parts.findLastIndex(part => part.type === 'tools');
-  const texts = parts.flatMap((part, index) => part.type === 'text' ? [{ index, key: part.key, text: part.text, streaming: part.streaming }] : []);
+  const texts = parts.flatMap((part, index) => part.type === 'text' ? [{ index, key: part.key, text: part.text }] : []);
   const after = texts.filter(text => text.index > lastTools);
   // A run that ends on a step (a stop, a failure) keeps the last thing the assistant said as its reply. One that ends
   // on a question has its card as the reply; what it said before belongs to the Thought.
@@ -92,5 +92,5 @@ export function turnActivity(replies: readonly ChatMessage[], active: boolean): 
   while (thought[0]?.kind === 'steps') thought.shift();
   while (thought.at(-1)?.kind === 'steps') thought.pop();
   const lastThinking = parts.findLast(part => part.type === 'thinking');
-  return { thought, latestThought: lastThinking?.type === 'thinking' ? plainLine(lastThinking.text) : '', steps, reply: reply.map(({ key, text, streaming }) => ({ key, text, streaming })) };
+  return { thought, latestThought: lastThinking?.type === 'thinking' ? plainLine(lastThinking.text) : '', steps, reply: reply.map(({ key, text }) => ({ key, text })) };
 }

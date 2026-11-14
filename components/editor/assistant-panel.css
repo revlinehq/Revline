@@ -32,11 +32,13 @@
 
 /* The thinking shelf: an inset tray on top of the composer, narrower than it, top corners rounded, bottom edge on the composer. */
 .thinking-shelf{display:flex;flex-direction:column;min-width:0;margin:0 14px;border:1px solid #333;border-bottom:0;border-radius:10px 10px 0 0;background:#222;font-size:12px;line-height:18px}
-.thinking-shelf-line{display:flex;align-items:center;gap:6px;width:100%;min-width:0;height:34px;padding:0 10px 0 12px;border:0;background:none;color:var(--muted-foreground);font:inherit;text-align:left;cursor:pointer;outline:none}
+.thinking-shelf-line{display:flex;align-items:center;gap:8px;width:100%;min-width:0;height:34px;padding:0 10px 0 12px;border:0;background:none;color:var(--muted-foreground);font:inherit;text-align:left;cursor:pointer;outline:none}
 .thinking-shelf-line:disabled{cursor:default}
 .thinking-shelf-line:not(:disabled):hover .thinking-shelf-chevron{color:var(--foreground)}
-.thinking-shelf-dot{width:6px;height:6px;flex:none;margin-right:2px;border-radius:999px;background:#bdbdbd}
 .thinking-shelf-title{flex:none;color:var(--foreground);font-weight:500}
+.thinking-shelf-label{display:inline-flex;flex:none;align-items:center;gap:6px}
+.thinking-shelf-icon{width:14px;height:14px;flex:none;color:var(--muted-foreground)}
+
 .thinking-shelf-activity{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .thinking-shelf-time{flex:none;margin-left:auto;padding-left:6px;font-variant-numeric:tabular-nums}
 .thinking-shelf-chevron{width:14px;height:14px;flex:none;margin-left:auto;color:var(--muted-foreground)}
