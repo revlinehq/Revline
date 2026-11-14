@@ -1,0 +1,1 @@
+- Railway dispatcher: a running slot whose latest build failed now raises a `worker-boot-crash` incident (once per lane and build per 30-minute hold). Why: on 2026-11-14 the always-on processor ran 15 commits behind main for hours after a failed build and nothing reported it.
