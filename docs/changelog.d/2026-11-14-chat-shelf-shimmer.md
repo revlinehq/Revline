@@ -1,0 +1,1 @@
+- Editor chat: the thinking shelf shows a Brain icon instead of a dot, step details drop their "·" separators, and live work ("Thinking", "Running N steps", the running step) shimmers until it finishes. Why: the founder asked for no dots and a shimmer on live text.
