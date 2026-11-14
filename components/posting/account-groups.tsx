@@ -39,7 +39,7 @@ function GroupCard({ group, accounts, onError }: { group: AccountGroup; accounts
       </form> : <><h2>{group.name}</h2><span className="dash-list-meta">{accountsLabel(members.length)}</span></>}
       <div className="dash-list-actions">
         <Button variant="ghost" size="icon" className="dash-more account-group-star" data-on={group.isDefault || undefined} aria-pressed={group.isDefault}
-          aria-label={group.isDefault ? `${group.name} is your default group` : `Make ${group.name} your default group`} title={group.isDefault ? 'Default group: the assistant posts here when you name no accounts' : 'Make this the default group'}
+          aria-label={group.isDefault ? `${group.name} is your default group` : `Make ${group.name} your default group`} title="Default"
           onClick={() => void act(() => setDefault({ groupId: group.isDefault ? null : group.id }), 'Could not change the default group.')}><Star /></Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="soft" size="sm" className="account-group-add" disabled={!others.length}><Plus />Add</Button></DropdownMenuTrigger>
@@ -65,7 +65,7 @@ function GroupCard({ group, accounts, onError }: { group: AccountGroup; accounts
       <span className="dash-list-row-name">@{account.username}<small>{account.status === 'needs_reconnect' ? `${PLATFORM_NAMES[account.platform]} · Reconnect needed` : PLATFORM_NAMES[account.platform]}</small></span>
       <Button variant="ghost" size="icon" className="dash-more" aria-label={`Remove @${account.username} from ${group.name}`} onClick={() => void act(() => setMember({ groupId: group.id, accountId: account.id, member: false }), 'Could not remove this account.')}><X /></Button>
     </div>)}
-    {!members.length && <div className="dash-list-row dash-list-note">No accounts yet. Add the accounts you post to together.</div>}
+    {!members.length && <div className="dash-list-row dash-list-note">No accounts yet.</div>}
   </Card>;
 }
 
@@ -79,16 +79,12 @@ export function AccountGroups({ accounts }: { accounts: PickerAccount[] }) {
   }
   return <section className="account-groups" aria-labelledby="account-groups-title">
     <div className="account-groups-head">
-      <div><h2 id="account-groups-title">Groups</h2><p>Group accounts so one click picks them all when you post. Star one as your default.</p></div>
+      <h2 id="account-groups-title">Groups</h2>
       <Button variant="primary" size="sm" disabled={!groups} onClick={() => void add()}><Plus />New group</Button>
     </div>
     {error && <p className="dash-error" role="alert">{error}</p>}
     {groups && (groups.length ? <div className="account-groups-grid">
       {groups.map(group => <GroupCard key={group.id} group={group} accounts={accounts} onError={setError} />)}
-      <Card variant="dash" className="dash-list account-group">
-        <div className="dash-list-head"><h2>All accounts</h2><span className="dash-list-meta">{accounts.length} connected</span></div>
-        <div className="dash-list-row dash-list-note">An account can sit in several groups. Removing it from a group does not disconnect it.</div>
-      </Card>
-    </div> : <Card variant="dash" className="dash-list"><div className="dash-list-row dash-list-note">No groups yet. Make one, like “Main” with your TikTok and Instagram, to pick them together when you post.</div></Card>)}
+    </div> : <Card variant="dash" className="dash-list"><div className="dash-list-row dash-list-note">No groups yet.</div></Card>)}
   </section>;
 }

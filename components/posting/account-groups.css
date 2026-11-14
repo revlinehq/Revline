@@ -1,8 +1,8 @@
 /* Account groups on the Connected accounts page (account-groups.tsx). */
 .account-groups { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
-.account-groups-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.account-groups-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .account-groups-head h2, .account-groups-title { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.3; }
-.account-groups-head p { margin: 4px 0 0; color: var(--dash-muted); font-size: 14px; line-height: 1.5; }
+.account-groups-title .dash-list-meta { margin-left: 8px; font-weight: 400; }
 .account-groups-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .account-group-name { flex: 1; min-width: 0; }
 .account-group-name [data-slot=input] { height: 34px; font-size: 15px; }

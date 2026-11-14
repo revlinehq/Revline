@@ -6,8 +6,7 @@ import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
-import { atLimit, connectedCount, limitMessage } from '@/lib/posting/account-caps';
-import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
+import { atLimit, limitMessage } from '@/lib/posting/account-caps';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
@@ -84,13 +83,12 @@ export function AccountsPage() {
   }
   return <main className="dash-content"><div className="dash-column">
     <h1 className="sr-only">Connected accounts</h1>
-    <p className="dash-column-note">Revline posts your clips to the accounts you connect here.{allowance && ` ${connectedCount(allowance.connected, allowance.limit)}.`}</p>
     {allowance && atLimit(allowance.connected, allowance.limit) && platforms?.some(entry => entry.live) && <p className="dash-column-note" role="note">{limitMessage(allowance.limit)}</p>}
-    {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
+    {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">Posting isn’t set up yet.</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}
     {accounts && accounts.length > 0 && <AccountGroups accounts={accounts} />}
-    {accounts && accounts.length > 0 && <h2 className="account-groups-title">Accounts</h2>}
+    {accounts && accounts.length > 0 && <h2 className="account-groups-title">Accounts{allowance && <span className="dash-list-meta">{allowance.limit === null ? allowance.connected : `${allowance.connected} of ${allowance.limit}`}</span>}</h2>}
     {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
       const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
       return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">

@@ -92,8 +92,9 @@ export function AccountPicker({ accounts, usable, chosen, onChange, groupId: sta
     <DropdownMenuItem onSelect={() => pickGroup(null)}><ListChecks aria-hidden="true" /><span>{variant === 'card' ? 'Pick accounts…' : 'Pick accounts one by one'}</span></DropdownMenuItem>
     <DropdownMenuItem asChild><Link href="/accounts"><Settings2 aria-hidden="true" /><span>{groups?.length ? 'Manage groups' : 'Make a group'}</span></Link></DropdownMenuItem>
   </DropdownMenuContent>;
-  const skippedNote = skipped.length > 0 && <p className="account-picker-skipped" role="status">
-    {skipped.length === 1 ? '1 account needs' : `${skipped.length} accounts need`} reconnecting{group || skippedIds.length ? ', skipped' : ''}: {skipped.map(account => `@${account.username}`).join(', ')}. <Link href="/accounts">Reconnect</Link>
+  // One short line; the handles are in its tooltip.
+  const skippedNote = skipped.length > 0 && <p className="account-picker-skipped" role="status" title={skipped.map(account => `@${account.username}`).join(', ')}>
+    {skipped.length === 1 ? '1 account needs' : `${skipped.length} accounts need`} reconnecting{group || skippedIds.length ? ', skipped' : ''}. <Link href="/accounts">Reconnect</Link>
   </p>;
 
   if (variant === 'card') {
@@ -142,6 +143,5 @@ export function AccountPicker({ accounts, usable, chosen, onChange, groupId: sta
       </DropdownMenu>}
     </div>
     {skippedNote}
-    {group && <p className="account-picker-note">Removing an account only changes this post.</p>}
   </div>;
 }
