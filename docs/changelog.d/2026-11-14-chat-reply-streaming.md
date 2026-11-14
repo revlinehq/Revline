@@ -1,0 +1,1 @@
+- Assistant: reply text streams into the chat as the model writes it, with no fade-in. Why: the reply gate held each step's text until the step ended, so replies landed all at once and faded in (founder report after #434).

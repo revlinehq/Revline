@@ -81,6 +81,11 @@ export function laneReplyGate(
       const showText = allowed(),
         result = await doStream();
       const held: LanguageModelV4StreamPart[] = [];
+      // A step that may show text streams it live until the step shows tool intent; from then on its text is held
+      // and released at finish only if the gate is still open, as before. Holding every step's text until finish made
+      // each reply arrive in one piece instead of streaming.
+      let intent = false;
+      const live = new Set<string>();
       return {
         ...result,
         stream: result.stream.pipeThrough(
@@ -89,15 +94,22 @@ export function laneReplyGate(
             LanguageModelV4StreamPart
           >({
             transform(part, controller) {
-              if (part.type === 'tool-call' || part.type === 'tool-input-start')
+              if (part.type === 'tool-call' || part.type === 'tool-input-start') {
                 noteToolIntent(part.toolName);
+                intent = true;
+              }
               if (
                 ['text-start', 'text-delta', 'text-end'].includes(part.type)
               ) {
-                if (showText) held.push(part);
+                const id = (part as { id: string }).id;
+                if (part.type === 'text-start' && showText && !intent && allowed()) live.add(id);
+                // A live block stops the moment the gate closes (a tool that needs finish showed up mid-block); its end
+                // still goes out, so the stream never leaves a block open.
+                if (live.has(id)) { if (part.type === 'text-end' || (!intent && allowed())) controller.enqueue(part); }
+                else if (showText) held.push(part);
                 return;
               }
-              // Buffer until tool intent is known, so a request phrased as a question cannot bypass the gate by editing.
+              // Text after tool intent waits for the step to finish, so a request phrased as a question cannot bypass the gate by editing.
               if (part.type === 'finish') {
                 if (showText && allowed())
                   for (const text of held) controller.enqueue(text);

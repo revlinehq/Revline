@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, type ReactNode } from "react";
-import { FlowTokenText } from "@/components/core/flowtoken";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type ListType = "bullets" | "steps";
@@ -97,7 +96,7 @@ function parseBlocks(text: string): ProseBlock[] {
   return blocks;
 }
 
-function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
+function InlineMarkup({ text }: { text: string }) {
   let bold = false;
   const words: ReactNode[] = [];
 
@@ -112,9 +111,7 @@ function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
       continue;
     }
     if (word === "*" && match.index === text.length - 1) continue;
-    const content = <FlowTokenText input={word} animation={animate ? "fadeIn" : null}
-      respectReducedMotion={false}
-      animationDuration="0.6s" animationTimingFunction="ease-in-out" />;
+    const content = word;
     words.push(
       bold ? (
         <strong
@@ -132,14 +129,8 @@ function InlineMarkup({ text, animate }: { text: string; animate: boolean }) {
   return words;
 }
 
-/** Markdown structure for text already revealed by the response renderer. */
-export const ChatProse = memo(function ChatProse({
-  text,
-  animate = false,
-}: {
-  text: string;
-  animate?: boolean;
-}) {
+/** Markdown structure for chat text, shown as it arrives. */
+export const ChatProse = memo(function ChatProse({ text }: { text: string }) {
   const blocks = parseBlocks(text.replace(/\\([_@])/g, "$1"));
 
   return (
@@ -148,15 +139,15 @@ export const ChatProse = memo(function ChatProse({
         if (block.type === "heading") {
           return (
             <h3 key={blockIndex} className="pt-0.5 font-semibold leading-snug">
-              <InlineMarkup text={block.text} animate={animate} />
+              <InlineMarkup text={block.text} />
             </h3>
           );
         }
         if (block.type === "table") {
           return (
             <Table key={blockIndex} className="text-xs">
-              <TableHeader><TableRow>{block.head.map((cell, cellIndex) => <TableHead key={cellIndex}><InlineMarkup text={cell} animate={animate} /></TableHead>)}</TableRow></TableHeader>
-              <TableBody>{block.rows.map((row, rowIndex) => <TableRow key={rowIndex}>{row.map((cell, cellIndex) => <TableCell key={cellIndex} className="whitespace-normal align-top"><InlineMarkup text={cell} animate={animate} /></TableCell>)}</TableRow>)}</TableBody>
+              <TableHeader><TableRow>{block.head.map((cell, cellIndex) => <TableHead key={cellIndex}><InlineMarkup text={cell} /></TableHead>)}</TableRow></TableHeader>
+              <TableBody>{block.rows.map((row, rowIndex) => <TableRow key={rowIndex}>{row.map((cell, cellIndex) => <TableCell key={cellIndex} className="whitespace-normal align-top"><InlineMarkup text={cell} /></TableCell>)}</TableRow>)}</TableBody>
             </Table>
           );
         }
@@ -170,7 +161,7 @@ export const ChatProse = memo(function ChatProse({
         if (block.type === "paragraph") {
           return (
             <p key={blockIndex}>
-              <InlineMarkup text={block.text} animate={animate} />
+              <InlineMarkup text={block.text} />
             </p>
           );
         }
@@ -183,7 +174,7 @@ export const ChatProse = memo(function ChatProse({
           >
             {block.items.map((item, itemIndex) => (
               <li key={itemIndex} className="pl-0.5">
-                <InlineMarkup text={item} animate={animate} />
+                <InlineMarkup text={item} />
               </li>
             ))}
           </List>
