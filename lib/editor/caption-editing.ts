@@ -107,8 +107,8 @@ export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{sta
   for(const other of overlapping){
     const otherEnd=other.start+other.duration,from={start:round(other.start),end:round(otherEnd)},said=wordsInside(other.text??'',text);
     // What is left of the neighbour before and after the new range.
-    // A leftover shorter than a frame and a half is no caption: it counts as covered (the server refuses under one frame).
-    const before=Math.max(0,start-other.start),after=Math.max(0,otherEnd-end),keep=frame*1.5;
+    // A leftover must stay clearly over one frame (the server refuses anything under one): less counts as covered.
+    const before=Math.max(0,start-other.start),after=Math.max(0,otherEnd-end),keep=frame*1.01;
     if(before>=keep&&after>=keep)throw new Error(`The new range sits inside ${name(other)}, which would have to be split. Retime that caption first, or choose a range that starts or ends outside it.`);
     if(before<keep&&after<keep||said&&Math.max(before,after)<other.duration/2){
       // Covered, or mostly covered by a caption that now says its words: it goes. Words this caption does not say never go.

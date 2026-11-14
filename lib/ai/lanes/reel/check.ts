@@ -135,7 +135,6 @@ export function captionSyncFailures(
 export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1]): { timeline: Timeline; followed: string[]; stranded: { clipId: string; text: string }[]; trimmed: CaptionNeighbourChange[] } {
   if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [], stranded: [], trimmed: [] };
   const was = retainedSpeechWords(before, assets), now = retainedSpeechWords(after, assets);
-  if (!was.length || !now.length) return { timeline: after, followed: [], stranded: [], trimmed: [] };
   const plain = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const frame = 1 / after.fps, within = (words: SpokenWord[], start: number, end: number) => words.filter(word => { const middle = (word.start + word.end) / 2; return middle >= start - frame && middle < end + frame; });
   const says = (text: string, words: SpokenWord[]) => !!plain(text) && words.length > 0 && plain(words.map(word => word.text).join(' ')).includes(plain(text));
@@ -148,8 +147,12 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
   // Fallback for a caption whose words cannot place it (a word cut at a piece edge): it moves with the footage under it.
   const withFootage = (old: { id: string; start: number; duration: number }) => {
     const under = before.clips.find(clip => (clip.kind === 'video' || clip.kind === 'image') && clip.start <= old.start + 1e-6 && old.start < clip.start + clip.duration - 1e-6);
-    const moved = under && after.clips.find(clip => clip.id === under.id);
-    const delta = moved ? moved.start - under!.start : 0;
+    if (!under) return;
+    // Where the source moment under the caption's start now plays: the same clip, or the clip a join or cut made of it.
+    const rate = under.playbackRate ?? 1, moment = under.sourceStart + (old.start - under.start) * rate;
+    const moved = after.clips.find(clip => clip.id === under.id && clip.sourceStart <= moment + 1e-6 && moment < sourceEndOf(clip) - 1e-6)
+      ?? after.clips.find(clip => clip.kind === under.kind && clip.assetId === under.assetId && trackOf(clip) === trackOf(under) && clip.sourceStart <= moment + 1e-6 && moment < sourceEndOf(clip) - 1e-6);
+    const delta = moved ? moved.start + (moment - moved.sourceStart) / (moved.playbackRate ?? 1) - old.start : 0;
     if (Math.abs(delta) >= frame / 2) moves.push({ id: old.id, start: Math.max(0, old.start + delta), end: Math.max(0, old.start + old.duration + delta), delta });
   };
   for (const caption of after.clips) {
@@ -160,6 +163,8 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
     const end = old.start + old.duration, inside = within(was, old.start, end);
     if (!inside.length) {
       if (closedGap(old.start, end) && !says(caption.text ?? '', within(now, caption.start, caption.start + caption.duration))) stranded.push({ clipId: caption.id, text: caption.text ?? '' });
+      // Without saved speech (or over none of it), a caption moves with the footage under it.
+      else if (!closedGap(old.start, end)) withFootage(old);
       continue;
     }
     if (!says(caption.text ?? '', inside)) {
