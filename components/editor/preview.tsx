@@ -19,8 +19,10 @@ import { calculateVisualRect } from '@/lib/editor/visual-source-geometry';
 import { dimensions,normalizeTimeline,type Timeline,type MediaAsset,type Clip,type VisualTransform } from '@/lib/editor/types';
 import { VisualHandles } from './visual-controls';
 import { CropControls, type CropControlsHandle } from './crop-controls';
+import { RegionControls } from './region-controls';
+import { frameMappable } from '@/lib/editor/blur-regions';
 import { TextControls } from './text-controls';
-import { useEditorState, usePausedPlaybackTime } from './editor-state';
+import { useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
 import { previewClipAtPoint, previewMediaOpacities, type PreviewTextBounds } from '@/lib/editor/preview-viewport';
 import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
@@ -60,6 +62,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
   timeline=useMemo(()=>resolvedAudioTimeline(normalizeTimeline(committedTimeline)),[committedTimeline]);
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
   const cropControls=useRef<CropControlsHandle>(null);
+  const editorStore=useEditorStore(),regionEdit=useEditorState(state=>state.regionEdit);
   const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad,onMutedChange});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad,onMutedChange};
   const mediaSession=useRef<ReturnType<typeof createPreviewMediaSession>|null>(null);
   const sourceCache=useRef<ReturnType<typeof createPreviewSourceCache>|null>(null);
@@ -355,7 +358,10 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview">{controlIcons&&<>{createPortal(<Play size={18} strokeWidth={1.5}/>,controlIcons.play)}{createPortal(<Pause size={18} strokeWidth={1.5}/>,controlIcons.pause)}</>}<div ref={container} className="hyperframes-host" onPointerDownCapture={()=>{seekOwned.current=false;}} onKeyDownCapture={()=>{seekOwned.current=false;}}/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
+  // Drawing blur regions takes the preview's pointer like cropping does; the picture underneath stays live.
+  const regionActive=!cropActive&&ready&&!!regionEdit&&selectedClip?.id===regionEdit.clipId&&selectedClip.kind==='video'&&!!asset?.width&&!!asset?.height&&!!onClipChange&&frameMappable(selectedClip);
+  const overlayActive=cropActive||regionActive;
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview">{controlIcons&&<>{createPortal(<Play size={18} strokeWidth={1.5}/>,controlIcons.play)}{createPortal(<Pause size={18} strokeWidth={1.5}/>,controlIcons.pause)}</>}<div ref={container} className="hyperframes-host" onPointerDownCapture={()=>{seekOwned.current=false;}} onKeyDownCapture={()=>{seekOwned.current=false;}}/>{ready&&!overlayActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
@@ -368,12 +374,13 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     else if(hit?.id!==selectedClip?.id)setTransformId(null);
     onSelectClip(hit?.id??null);
     if(event.detail===2&&(hit?.kind==='video'||hit?.kind==='image'))onEditClip?.(hit.id);
-  }} onKeyDown={event=>{if(event.key===' '||event.key==='Enter')event.stopPropagation();}}/>}{ready&&!cropActive&&selectionVisible&&selectedClip&&transformId===selectedClip.id&&onVisualChange&&<div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:layerZIndex(selectedClip,timeline.clips.findIndex(clip=>clip.id===selectedClip.id))}}><VisualHandles key={selectedClip.id} clip={selectedClip} canvas={canvas} contentRect={contentRect} onPreview={previewTransform} onEdit={()=>onEditClip?.(selectedClip.id)} onCommit={transform=>onVisualChange({transform})}/></div>} {ready&&!cropActive&&onSelectClip&&onClipChange&&<LiveTextControls timeline={timeline} assets={assets} revision={revision} selected={selectedClip?.id} activeId={transformId??undefined} onActivate={id=>{setTransformId(id);const clip=timeline.clips.find(clip=>clip.id===id);if(clip?.kind==='video'||clip?.kind==='image')onEditClip?.(id);}} getDocument={()=>player.current?.iframeElement?.contentDocument??null} onSelect={onSelectClip} onCommit={onClipChange} onEdit={onEditText}/>}
+  }} onKeyDown={event=>{if(event.key===' '||event.key==='Enter')event.stopPropagation();}}/>}{ready&&!overlayActive&&selectionVisible&&selectedClip&&transformId===selectedClip.id&&onVisualChange&&<div style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:layerZIndex(selectedClip,timeline.clips.findIndex(clip=>clip.id===selectedClip.id))}}><VisualHandles key={selectedClip.id} clip={selectedClip} canvas={canvas} contentRect={contentRect} onPreview={previewTransform} onEdit={()=>onEditClip?.(selectedClip.id)} onCommit={transform=>onVisualChange({transform})}/></div>} {ready&&!overlayActive&&onSelectClip&&onClipChange&&<LiveTextControls timeline={timeline} assets={assets} revision={revision} selected={selectedClip?.id} activeId={transformId??undefined} onActivate={id=>{setTransformId(id);const clip=timeline.clips.find(clip=>clip.id===id);if(clip?.kind==='video'||clip?.kind==='image')onEditClip?.(id);}} getDocument={()=>player.current?.iframeElement?.contentDocument??null} onSelect={onSelectClip} onCommit={onClipChange} onEdit={onEditText}/>}
     {cropActive&&<CropControls key={selectedClip.id} ref={cropControls} initial={selectedClip.crop} sourceSize={{width:asset.width!,height:asset.height!}} canvas={canvas} revision={revision} getSource={()=>{
       const doc=player.current?.iframeElement?.contentDocument;
       const frame=Array.from(doc?.querySelectorAll<HTMLElement>('[data-visual-clip]')??[]).find(node=>node.dataset.visualClip===selectedClip.id);
       return frame?.querySelector<HTMLImageElement|HTMLVideoElement>('img,video')??null;
     }} onCommit={crop=>onCropCommit(selectedClip.id,crop)} onCancel={onCropCancel}/>}
+    {regionActive&&<RegionControls key={selectedClip.id} clip={selectedClip} source={{width:asset!.width!,height:asset!.height!}} canvas={canvas} selected={regionEdit!.index} onSelect={index=>editorStore.setState({regionEdit:{clipId:selectedClip.id,index}})} onCommit={(regions,index)=>{onClipChange!(selectedClip.id,{blurRegions:regions});editorStore.setState({regionEdit:{clipId:selectedClip.id,index}});}} onExit={()=>editorStore.setState({regionEdit:null})}/>}
     {safeArea&&timeline.aspectRatio==='vertical'&&<SafeAreaOverlay platform={safeArea}/>}
     {(!ready||buffering)&&<div className="preview-loading" style={buffering?{background:'transparent',zIndex:2,pointerEvents:'none'}:undefined} role="status" aria-label={buffering?'Loading clip':'Loading preview'}><LoaderCircle className="animate-spin" size={20}/></div>}</div>;
 });

@@ -73,6 +73,7 @@ export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${sharedL
 ${LANES[lane].instructions}
 Basic trims, captions, audio and timeline operations are shared. No style confirmation is needed for them or for questions.
 Shot changes in footage (hard cuts, whips, fades with addTransition): readSkill transitions.
+Hiding private details in footage (emails, names, keys, faces, number plates, notifications): blurRegion on the clip, blur or pixelate a rectangle of its frame, optionally for a clip-local start/end; shared, no capability to load.
 J-cuts, L-cuts, smoother cuts or hidden jump cuts on speech: one setSplitEdits call after the transcript cut (type auto picks per cut from the words). Never build them from unlink, trim, split and move.
 Use discoverCapabilities for additional skills/tools and loadCapability for supporting workflows, or readSkill for a known skill. Load only what this request needs. Loading support never changes the primary deliverable, user decisions, task identity or finish obligations. Switch the primary workflow only when the requested deliverable changes; /clip and explicit user style stay authoritative.
 For a one-take talking-head short-form/reel rough cut ("edit my rough for a reel", "make this a reel", "clean my rough cut"), choose reel unless the user chose another style. For separate highlights from a long source choose clip. Read the workflow skill before that work.

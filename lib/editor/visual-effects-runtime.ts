@@ -11,6 +11,8 @@ import { DEFAULT_NEON_EDGES } from './neon-edges';
 import { TEXTURE_OVERLAYS_GLSL } from './texture-overlays-shader';
 import { MOTION_LIGHT_GLSL } from './motion-light-shader';
 import { effectsAt } from './effect-keyframes';
+import { blurRegionActive, blurRegionSigma, pixelateBlocks, regionSourceTime } from './blur-regions';
+import type { BlurRegion } from './types';
 export { installAdjustmentLayers } from './adjustment-layers';
 export { installSolidColorLayers } from './solid-color-layers';
 export { installClipMasks } from './masks';
@@ -20,8 +22,10 @@ import { decodeLevels, hasReactiveEffects, reactiveEffectsAt } from './audio-rea
 import { HSL_CENTERS, curvesTexture, customAtlas, hslUniform, lookAtlas, type ColorFinishSource } from './color-finish';
 export { installVisualFades } from './visual-fades-runtime';
 
-type RenderEffects = VisualEffects & { impact?: ImpactSettings; parallax?: ParallaxSettings };
-export type VisualEffectInput = RenderEffects & { cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number; audioReactive?:AudioReactive; colorFinish?:ColorFinishSource };
+/** One pass of a clip's blur regions: each active region with the blur step this pass adds (design amount units, 0 once done). */
+type RegionPass = { regions: { region: BlurRegion; step: number; first: boolean; last: boolean }[] };
+type RenderEffects = VisualEffects & { impact?: ImpactSettings; parallax?: ParallaxSettings; regionPass?: RegionPass };
+export type VisualEffectInput = RenderEffects & { blurRegions?: BlurRegion[]; regionClock?: Pick<Clip, 'sourceStart' | 'playbackRate' | 'speedRamp'>; cameraGlideBlur?:CameraGlideBlurSource; effectKeyframes?:EffectKeyframeLane[]; motionOffset?:number; audioReactive?:AudioReactive; colorFinish?:ColorFinishSource };
 export type VisualEffectSource = VisualEffectInput & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
@@ -39,6 +43,20 @@ function softBlurSteps(amount: number) {
     steps.push(step); variance += step * step;
   }
   return steps;
+}
+
+/** The most regions one pass draws (uniform arrays in the region shader); validation allows no more per clip. */
+const REGION_SLOTS = 8;
+/**
+ * A clip's blur regions as the first passes of its effect canvas. Blur regions run the soft blur's
+ * successive 5x5 passes (same total variance); pixelate regions draw in the first pass and are carried after.
+ */
+function regionPasses(regions: BlurRegion[] | undefined, sourceTime: number): RenderEffects[] {
+  const active = (regions ?? []).filter(region => blurRegionActive(region, sourceTime)).slice(0, REGION_SLOTS);
+  if (!active.length) return [];
+  const steps = active.map(region => region.mode === 'blur' ? softBlurSteps(2 * blurRegionSigma(region.strength)) : []);
+  const count = Math.max(1, ...steps.map(list => list.length));
+  return Array.from({ length: count }, (_, pass) => ({ regionPass: { regions: active.map((region, index) => ({ region, step: steps[index][pass] ?? 0, first: pass === 0, last: pass >= steps[index].length - 1 })) } }));
 }
 
 /** Error prefix a strict (GPU) export throws when an effect could not draw; scripts/render-worker.mjs matches it. */
@@ -86,8 +104,8 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
     for (let pending = [...frameBitmaps.values()].filter(record => !record.bitmap && !record.failed); pending.length; pending = [...frameBitmaps.values()].filter(record => !record.bitmap && !record.failed)) await Promise.all(pending.map(record => record.ready));
   };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; impactProgram?: WebGLProgram; impactUniforms?: Record<string, WebGLUniformLocation | null>; parallaxProgram?: WebGLProgram; parallaxUniforms?: Record<string, WebGLUniformLocation | null>; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; listened?: HTMLVideoElement; mirror?: HTMLVideoElement; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
-  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight' | 'curvesTexture' | 'lutTexture' | 'parallaxProgram' | 'parallaxUniforms' | 'impactProgram' | 'impactUniforms'>;
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; impactProgram?: WebGLProgram; impactUniforms?: Record<string, WebGLUniformLocation | null>; parallaxProgram?: WebGLProgram; parallaxUniforms?: Record<string, WebGLUniformLocation | null>; regionProgram?: WebGLProgram; regionUniforms?: Record<string, WebGLUniformLocation | null>; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; listened?: HTMLVideoElement; mirror?: HTMLVideoElement; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight' | 'curvesTexture' | 'lutTexture' | 'parallaxProgram' | 'parallaxUniforms' | 'impactProgram' | 'impactUniforms' | 'regionProgram' | 'regionUniforms'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
   // A preview cut swaps a whole effect stack at once (mirror blur: four blurred layers). Spare
@@ -124,7 +142,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
   let timedEffects:Clip[]=[];
   function effectPasses(base:VisualEffectInput,time:number):RenderEffects[] {
-    const {softBlur,directionalBlur,frameCorners,parallax,...other}=base;
+    const {softBlur,directionalBlur,frameCorners,parallax,blurRegions:_regions,regionClock:_clock,...other}=base;
     const passes:RenderEffects[]=[];
     if(parallax)passes.push({parallax});
     // Blur has its own pass so combining it with radial blur never multiplies sample counts.
@@ -149,6 +167,44 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   }
   const vertex = `attribute vec2 position;varying vec2 uv;void main(){uv=(position+1.0)*0.5;gl_Position=vec4(position,0.0,1.0);}`;
   const impactFragment = `precision highp float;varying vec2 uv;uniform sampler2D source;uniform vec2 size;vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}${IMPACT_GLSL}void main(){vec4 c=sampleSource(uv);gl_FragColor=vec4(impactLook(uv,c.rgb),c.a);}`;
+  // Blur regions: inside a region, the blur step (5x5 binomial taps, like the soft blur) or the block average;
+  // in a blur region's margin, the same step so the next pass blurs blurred pixels (a true Gaussian at the edge);
+  // everywhere else the untouched source. Rectangles are in texture coordinates (y up).
+  const regionFragment = `precision highp float;varying vec2 uv;uniform sampler2D source;uniform sampler2D original;uniform vec2 size;uniform float count;
+uniform vec4 rects[${REGION_SLOTS}];uniform vec4 looks[${REGION_SLOTS}];uniform vec2 margins[${REGION_SLOTS}];
+vec4 sampleSource(vec2 p){return texture2D(source,clamp(p,vec2(0.0),vec2(1.0)));}
+vec4 blurred(float spacing){
+  if(spacing<=0.0)return sampleSource(uv);
+  vec4 c=vec4(0.0);
+  for(int y=-2;y<=2;y++)for(int x=-2;x<=2;x++){
+    float wx=x==0?6.0:(abs(float(x))==1.0?4.0:1.0),wy=y==0?6.0:(abs(float(y))==1.0?4.0:1.0);
+    c+=sampleSource(uv+vec2(float(x),float(y))*spacing/size)*(wx*wy/256.0);
+  }
+  return c;
+}
+bool inside(vec2 p,vec4 r){return p.x>=r.x&&p.x<r.x+r.z&&p.y>=r.y&&p.y<r.y+r.w;}
+void main(){
+  // Overlapping regions: the later one wins, as the fast export lays them over in order.
+  for(int k=0;k<${REGION_SLOTS};k++){
+    if(float(${REGION_SLOTS - 1}-k)>=count)continue;
+    vec4 r=rects[${REGION_SLOTS - 1}-k],l=looks[${REGION_SLOTS - 1}-k];
+    if(!inside(uv,r))continue;
+    if(l.x>1.5){gl_FragColor=sampleSource(uv);return;}
+    if(l.x<0.5){gl_FragColor=blurred(l.y);return;}
+    // A block's average from bilinear taps two texels apart (each averages 2x2), up to 16x16 taps.
+    vec2 cell=floor(clamp((uv-r.xy)/r.zw,0.0,0.99999)*l.zw),span=r.zw/l.zw,origin=r.xy+cell*span;
+    vec2 taps=clamp(ceil(span*size/2.0),1.0,16.0);
+    vec4 c=vec4(0.0);
+    for(int y=0;y<16;y++){if(float(y)>=taps.y)break;for(int x=0;x<16;x++){if(float(x)>=taps.x)break;c+=sampleSource(origin+(vec2(float(x),float(y))+0.5)/taps*span);}}
+    gl_FragColor=c/(taps.x*taps.y);return;
+  }
+  for(int i=0;i<${REGION_SLOTS};i++){
+    if(float(i)>=count)break;
+    vec4 r=rects[i],l=looks[i];vec2 m=margins[i];
+    if(l.x<0.5&&l.y>0.0&&m.x>0.0&&inside(uv,vec4(r.xy-m,r.zw+2.0*m))){gl_FragColor=blurred(l.y);return;}
+  }
+  gl_FragColor=texture2D(original,uv);
+}`;
   const parallaxFragment = `precision highp float;varying vec2 uv;uniform sampler2D source;uniform vec2 size;${PARALLAX_GLSL}void main(){gl_FragColor=sampleSource(uv);}`;
   const grade = `vec3 rgb=c.rgb*exp2(grade.x);
   rgb*=vec3(1.0+balance.x*0.18+balance.y*0.08,1.0-balance.y*0.16,1.0-balance.x*0.18+balance.y*0.08);
@@ -311,17 +367,17 @@ void main(){
     entry.injected?.removeAttribute('data-revline-effects');
     entry.canvas?.remove();
     if (preview && !disposed && !entry.failed && entry.canvas && entry.gl && !entry.gl.isContextLost()) {
-      const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms } = entry;
-      available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms });
+      const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms, regionProgram, regionUniforms } = entry;
+      available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms, regionProgram, regionUniforms });
       if (available.length > SPARE_CONTEXTS) destroy(available.shift()!);
       else if (liveContexts() - 1 > CONTEXT_BUDGET) destroy(available.pop()!);
     } else destroy(entry);
-    entry.impactProgram = undefined; entry.impactUniforms = undefined; entry.parallaxProgram = undefined; entry.parallaxUniforms = undefined; entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined; entry.curvesTexture = undefined; entry.lutTexture = undefined; entry.finishKey = undefined;
+    entry.impactProgram = undefined; entry.impactUniforms = undefined; entry.regionProgram = undefined; entry.regionUniforms = undefined; entry.parallaxProgram = undefined; entry.parallaxUniforms = undefined; entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined; entry.curvesTexture = undefined; entry.lutTexture = undefined; entry.finishKey = undefined;
   }
   function destroy(resources: Resources) {
     const gl = resources.gl; if (!gl) return;
     if (resources.canvas) retired.add(resources.canvas);
-    gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null); gl.deleteProgram(resources.parallaxProgram ?? null); gl.deleteProgram(resources.impactProgram ?? null);
+    gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null); gl.deleteProgram(resources.parallaxProgram ?? null); gl.deleteProgram(resources.impactProgram ?? null); gl.deleteProgram(resources.regionProgram ?? null);
     for(const texture of [...resources.passTextures??[],resources.curvesTexture,resources.lutTexture])if(texture)gl.deleteTexture(texture);
     gl.deleteFramebuffer(resources.framebuffer??null);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
@@ -339,7 +395,8 @@ void main(){
     // A grade is a single point-color pass. Preserve its source/project detail
     // rather than magnifying the Fit-sized bitmap when the user zooms in.
     const colorOnly=preview&&passes.length===1&&passes[0].colorGrade?.enabled&&!enabled({...passes[0],colorGrade:undefined});
-    const budget=preview?Math.sqrt(passes.length):1,canvas=entry.canvas!;
+    // Region passes are cheap outside their rectangles and must not soften the whole clip.
+    const budget=preview?Math.sqrt(Math.max(1,passes.filter(pass=>!(pass as RenderEffects).regionPass).length)):1,canvas=entry.canvas!;
     const width=colorOnly?entry.detailWidth!:Math.max(1,Math.round(entry.nominalWidth!/budget));
     const height=colorOnly?entry.detailHeight!:Math.max(1,Math.round(entry.nominalHeight!/budget));
     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;entry.lastSource=undefined;}
@@ -446,7 +503,7 @@ void main(){
     // Keyframed controls are evaluated in the clip's motion path time, the same clock as its movement.
     const animated=entry.effects.effectKeyframes?.length?{...entry.effects,...effectsAt(entry.effects,entry.effects.effectKeyframes,time-start+(entry.effects.motionOffset??0))}:entry.effects;
     const reactive=entry.effects.audioReactive,levels=reactive?(entry.levels??=decodeLevels(reactive.levels)):undefined;
-    const passes=effectPasses(reactiveEffectsAt(animated,reactive,levels,time),time);
+    const passes=[...regionPasses(entry.effects.blurRegions,entry.effects.regionClock?regionSourceTime(entry.effects.regionClock,time-start):0),...effectPasses(reactiveEffectsAt(animated,reactive,levels,time),time)];
     if(nativeCorners(entry,passes))return;
     if (!passes.length || !ahead && !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
@@ -466,7 +523,7 @@ void main(){
       if (node.style.transform && node.style.transform !== 'none') transforms.push(node.style.transform.includes('%') ? getComputedStyle(node).transform : node.style.transform);
     }
     const transformKey = transforms.join('|');
-    const passKey=passes.map(pass=>pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:pass.directionalBlur?.enabled?`directional:${pass.directionalBlur.amount}:${pass.directionalBlur.angle}`:pass.parallax?`parallax:${frame}`:pass.impact?`impact:${JSON.stringify(pass.impact)}`:'base').join('|');
+    const passKey=passes.map(pass=>pass.regionPass?`regions:${JSON.stringify(pass.regionPass.regions.map(item=>[item.region,item.step]))}`:pass.zoomBlur?.enabled?`${pass.zoomBlur.amount}:${pass.zoomBlur.centerX}:${pass.zoomBlur.centerY}`:pass.directionalBlur?.enabled?`directional:${pass.directionalBlur.amount}:${pass.directionalBlur.angle}`:pass.parallax?`parallax:${frame}`:pass.impact?`impact:${JSON.stringify(pass.impact)}`:'base').join('|');
     // CSS motion can run between decoded frames. Wait for the next video
     // frame before redrawing its bitmap; paused transforms still redraw now.
     const playingVideo = source instanceof HTMLVideoElement && !source.paused && !!source.requestVideoFrameCallback;
@@ -516,6 +573,26 @@ void main(){
         else{
           gl.bindFramebuffer(gl.FRAMEBUFFER,entry.framebuffer!);
           gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,entry.passTextures![index%2],0);
+        }
+        const rp=effects.regionPass;
+        if(rp){
+          entry.regionProgram??=makeProgram(gl,regionFragment);
+          entry.regionUniforms??=Object.fromEntries(['source','original','size','count','rects','looks','margins'].map(name=>[name,gl.getUniformLocation(entry.regionProgram!,name)]));
+          gl.useProgram(entry.regionProgram);
+          const ru=entry.regionUniforms,displayHeight=parseFloat(entry.source.style.height)||sourceDisplayWidth*height/width;
+          const rects=new Float32Array(REGION_SLOTS*4),looks=new Float32Array(REGION_SLOTS*4),margins=new Float32Array(REGION_SLOTS*2);
+          for(const [slot,{region,step,first,last}] of rp.regions.entries()){
+            rects.set([region.x,1-region.y-region.height,region.width,region.height],slot*4);
+            if(region.mode==='pixelate'){const blocks=pixelateBlocks(region,sourceDisplayWidth,displayHeight,resolution);looks.set(first?[1,0,blocks.columns,blocks.rows]:[2,0,1,1],slot*4);continue;}
+            looks.set([0,step*pixelScale*.5,1,1],slot*4);
+            // The margin a full Gaussian reaches past the region, in source pixels, blurred until the region's last step.
+            const reach=last?0:Math.ceil(3*blurRegionSigma(region.strength)*pixelScale)+2;
+            margins.set([reach/width,reach/height],slot*2);
+          }
+          gl.uniform1i(ru.source,0);gl.uniform1i(ru.original,3);gl.uniform2f(ru.size,width,height);gl.uniform1f(ru.count,rp.regions.length);
+          gl.uniform4fv(ru.rects,rects);gl.uniform4fv(ru.looks,looks);gl.uniform2fv(ru.margins,margins);
+          gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,entry.texture!);gl.activeTexture(gl.TEXTURE0);
+          gl.drawArrays(gl.TRIANGLES,0,6);continue;
         }
         if(pa){
           entry.parallaxProgram??=makeProgram(gl,parallaxFragment);
@@ -633,7 +710,7 @@ void main(){
   function set(id: string, effects: VisualEffectInput) {
     baseEffects.set(id,effects);
     const previous = entries.get(id);
-    if (!effects.parallax&&!enabled(effects)&&!effects.colorFinish&&!effects.effectKeyframes?.length&&!hasReactiveEffects(effects.audioReactive)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.effectPreset==='impact-frame'||clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
+    if (!effects.parallax&&!effects.blurRegions?.length&&!enabled(effects)&&!effects.colorFinish&&!effects.effectKeyframes?.length&&!hasReactiveEffects(effects.audioReactive)&&!(effects.cameraGlideBlur?.amount&&effects.cameraGlideBlur.amount>0)&&!timedEffects.some(clip=>clip.effectPreset==='impact-frame'||clip.zoomBlur?.enabled&&clip.zoomBlur.amount>0)) { remove(id); return; }
     const source = document.getElementById(id);
     if (!(source instanceof HTMLVideoElement || source instanceof HTMLImageElement)) return;
     const entry = previous ?? { source, effects, dirty: true };

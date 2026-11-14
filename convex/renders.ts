@@ -1,3 +1,5 @@
+import { BLUR_REGIONS_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { processorCan } from './lib/processor_capabilities';
 import { recordIncidentSafely, incidentDeployment } from './lib/incidents';
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
@@ -43,6 +45,8 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   if(args.clipId!==undefined){try{snapshot=clipExportTimeline(saved,args.clipId);}catch(error){throw new ConvexError((error as Error).message);}}
   if(args.burnCaptions === false) snapshot = {...snapshot, clips: snapshot.clips.filter(clip => clip.kind !== 'caption')};
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
+  // An older processor would draw the footage without its blur regions, showing what they hide.
+  if (timeline.clips.some(clip => clip.blurRegions?.length) && !await processorCan(ctx, 'render:blur-regions')) throw new ConvexError('Blurred regions need the latest export renderer, which is still rolling out. Try exporting again in a few minutes.');
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   // The indexed reads and insert share one transaction, so separate projects
   // cannot race past the account's outstanding-work limit.
@@ -53,7 +57,8 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: dedicated Ultra export workers.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
+  // An older worker never claims it: its renderer would export the regions' pixels in the clear.
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}), ...(timeline.clips.some(clip => clip.blurRegions?.length) ? { requiredProcessorVersion: BLUR_REGIONS_PROCESSOR_VERSION } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
 }

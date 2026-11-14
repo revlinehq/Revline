@@ -10,6 +10,7 @@ import { userError } from '@/lib/user-error';
 import type { CaptionPresetId } from '@/lib/editor/caption-presets';
 import { CaptionPresetPicker } from './caption-preset-picker';
 import { EffectTextFont } from './effect-text-font';
+import { BlurRegionsRow } from './blur-regions-row';
 import type { TextFontId } from '@/lib/editor/text-fonts';
 import { useEditorStore, useEditorState } from './editor-state';
 import './effects-panel.css';
@@ -18,7 +19,7 @@ const HOOK_TYPING_PAUSE_MS = 400;
 
 /**
  * The media panel's Effects tab: one-click changes to the open timeline, top to bottom. Subtitles on/off, a caption preset, blur
- * background or tight crop, and a hook line. Each change goes through `onChange`, the editor's normal edit path,
+ * background or tight crop, blur regions on the selected clip, and a hook line. Each change goes through `onChange`, the editor's normal edit path,
  * so it saves, shows live and undoes like any other edit. A further effect is one more `effect-row` below these.
  */
 export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLoadAsset }: {
@@ -123,6 +124,7 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
       </ToggleGroup>
       {(layout.disabled || layout.value === 'mixed') && <p className="effect-hint">{layout.disabled ?? 'Clips use different layouts'}</p>}
     </section>
+    <BlurRegionsRow timeline={timeline} locked={locked} onChange={onChange}/>
     <section className="effect-row">
       <label className="effect-label" htmlFor="effect-hook">Hook</label>
       <Input id="effect-hook" className="effect-input" type="text" autoComplete="off" maxLength={HOOK_MAX_LENGTH} placeholder="Type a hook" disabled={locked || empty} value={draft}

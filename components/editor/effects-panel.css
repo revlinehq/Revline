@@ -73,3 +73,23 @@ html:not([data-workspace-theme=dark]) .effect-font-menu[data-slot=select-content
 html:not([data-workspace-theme=dark]) .effect-size-slider [data-slot=slider-track]{background:#d4d4d4}
 html:not([data-workspace-theme=dark]) .effect-size-slider [data-slot=slider-range]{background:#292929}
 html:not([data-workspace-theme=dark]) .effect-size-slider [data-slot=slider-thumb]{border-color:#292929;background:#292929}
+/* Blur regions: one card per region under the row head; the selected one (edited on the preview) is outlined. */
+.preview-inspector .effect-row-action[data-slot=button]{height:28px;padding:0 10px;border-radius:6px;background:var(--dash-card);color:var(--ws-text,#f2f2f2);font-size:12px;font-weight:500;box-shadow:none;transition:none}
+.preview-inspector .effect-row-action[data-slot=button]:hover:not(:disabled){background:var(--dash-tile)}
+.preview-inspector .effect-row-action[data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.blur-region-item{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid transparent;border-radius:8px;background:var(--dash-card)}
+.blur-region-item[data-selected]{border-color:#ffffff33}
+.preview-inspector .blur-region-name[data-slot=button]{height:24px;padding:0 6px;margin-left:-6px;border:0;border-radius:6px;background:none;color:var(--ws-text,#f2f2f2);font-size:12px;font-weight:500;box-shadow:none;transition:none}
+.preview-inspector .blur-region-name[data-slot=button]:hover{background:var(--dash-tile);color:#fff}
+.preview-inspector .blur-region-name[data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.preview-inspector .blur-region-remove[data-slot=button]{width:24px;height:24px;color:var(--ws-muted,#999);box-shadow:none;transition:none}
+.preview-inspector .blur-region-remove[data-slot=button]:hover:not(:disabled){background:var(--dash-tile);color:var(--ws-text,#f2f2f2)}
+.preview-inspector .blur-region-remove[data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.blur-region-value{flex:none;width:28px;color:var(--ws-muted,#999);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.blur-region-times{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.blur-region-time{display:flex;align-items:center;gap:6px;min-width:0;color:var(--ws-muted,#999);font-size:12px}
+.blur-region-time .effect-input[data-slot=input]{height:30px;min-width:0;background:#2a2a2a;font-variant-numeric:tabular-nums}
+html:not([data-workspace-theme=dark]) .blur-region-item[data-selected]{border-color:#0000002a}
+html:not([data-workspace-theme=dark]) .preview-inspector .blur-region-name[data-slot=button]{color:#292929}
+html:not([data-workspace-theme=dark]) .blur-region-time .effect-input[data-slot=input]{background:#fff}
+html:not([data-workspace-theme=dark]) .preview-inspector .effect-row-action[data-slot=button]{color:#292929}

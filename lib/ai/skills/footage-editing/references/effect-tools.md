@@ -1,6 +1,6 @@
 ---
 name: "effect-tools"
-description: "Exact controls, ranges, coordinate rules and examples for the motion, camera, effect and layout tools: animateClip, animateEffect, setVisualEffects, addTimedEffect, configureTimedEffect, configureSmoothZoom, configureCameraMotion, setSpeedRamp, setAudioReactive, setMask, applyLayout, trackPoints, followSubject, planEffects and previewRender. Read before using any of them."
+description: "Exact controls, ranges, coordinate rules and examples for the motion, camera, effect and layout tools: animateClip, animateEffect, setVisualEffects, addTimedEffect, configureTimedEffect, configureSmoothZoom, configureCameraMotion, setSpeedRamp, setAudioReactive, setMask, blurRegion, applyLayout, trackPoints, followSubject, planEffects and previewRender. Read before using any of them."
 ---
 # Effect, motion and camera tools
 
@@ -69,6 +69,9 @@ Subtle reads best: scale 0.04–0.08 on beats (0.06 is a 6% bump), shake about 0
 
 ## Masks: setMask
 Examples: a box that grows from the center, an oval vignette that tightens on a punchline, a diagonal wipe, text that reveals b-roll. feather 0 is hard, 20–60 soft. To blur everything but one area, invert the mask on a blurred copy above the footage.
+
+## Region blur: blurRegion
+Hides private details while the rest stays sharp: an email or API key in a screen recording, a face, a number plate, a notification. Read one frame first (getFrames) and give the rectangle with a little room around the text; space:'frame' takes the rectangle as fractions of that rendered frame, otherwise it is 0..1 of the clip's source frame. Blur (default) or pixelate; strength 60 is the default, 40+ makes text unreadable, 80+ for faces. start/end are clip-local seconds when the detail is on screen only for a while; content that moves needs one region per stretch. Up to 8 regions per clip: replace:index or remove:index edits one, clear:true removes all. It is a clip property, so trims, splits and moves keep it, and preview and every export draw it the same.
 
 ## Layouts: applyLayout
 - two-rows only sets framing: arrange overlapping row footage on separate V layers with timeline tools when needed. detectedRegions refuses uncertain or changing layouts.

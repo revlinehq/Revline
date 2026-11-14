@@ -1,18 +1,21 @@
 import { splitClip, snapTime } from './operations';
 import { normalizeTimeline, type Clip, type Timeline } from './types';
+import { blurRegionActive, regionSourceTime } from './blur-regions';
 
 export const FREEZE_MODES = ['insert', 'hold'] as const;
 export type FreezeMode = typeof FREEZE_MODES[number];
 export const MIN_FREEZE_SECONDS = .2, MAX_FREEZE_SECONDS = 10;
 
 /** The still keeps the footage's framing and look, but none of its timing, sound or movement. */
-function stillOf(clip: Clip, imageAssetId: string, id: string, start: number, duration: number): Clip {
+function stillOf(clip: Clip, imageAssetId: string, id: string, start: number, duration: number, at: number): Clip {
   const {
     linkedClipId: _link, volume: _volume, playbackRate: _rate, speedRamp: _ramp, motion: _motion, motionOffset: _offset, effectKeyframes: _keys,
     focus: _focus, smoothZoom: _zoom, cameraMotion: _camera, visualFade: _fade, visualFadeTiming: _fadeTiming, transition: _transition,
-    audio: _audio, audioFadeTiming: _audioFade, audioSeparated: _separated, mask: _mask, ...look
+    audio: _audio, audioFadeTiming: _audioFade, audioSeparated: _separated, mask: _mask, blurRegions: _regions, ...look
   } = clip;
-  return { ...look, id, kind: 'image', assetId: imageAssetId, start, duration, sourceStart: 0 } as Clip;
+  // The regions covering the frozen frame stay on the still for its whole length.
+  const frozen = regionSourceTime(clip, at - clip.start), blurRegions = clip.blurRegions?.filter(region => blurRegionActive(region, frozen)).map(({ start: _start, end: _end, ...region }) => region);
+  return { ...look, id, kind: 'image', assetId: imageAssetId, start, duration, sourceStart: 0, ...blurRegions?.length ? { blurRegions } : {} } as Clip;
 }
 
 /**
@@ -34,7 +37,7 @@ export function insertFreezeFrame(input: Timeline, clipId: string, at: number, d
     // Ripple: everything starting at or after the freeze moves later, keeping sync across layers.
     const moved = timeline.clips.map(item => item.start >= at - 1e-6 ? { ...item, start: item.start + duration, ...(item.audioReactive ? { audioReactive: { ...item.audioReactive, start: item.audioReactive.start + duration } } : {}) } : item);
     const markers = timeline.markers?.map(marker => marker.time >= at - 1e-6 ? { ...marker, time: marker.time + duration } : marker);
-    return normalizeTimeline({ ...timeline, ...(markers ? { markers } : {}), clips: [...moved, stillOf(clip, imageAssetId, stillId, at, duration)] });
+    return normalizeTimeline({ ...timeline, ...(markers ? { markers } : {}), clips: [...moved, stillOf(clip, imageAssetId, stillId, at, duration, at)] });
   }
   if (end - at < frame) throw new Error('Hold a frame before the clip ends, or use insert mode.');
   const holdEnd = Math.min(end, at + duration);
@@ -43,7 +46,7 @@ export function insertFreezeFrame(input: Timeline, clipId: string, at: number, d
   if (holdEnd < end - frame / 2) timeline = splitClip(timeline, middleId, holdEnd, newId());
   const middle = timeline.clips.find(item => item.id === middleId)!;
   // The held picture becomes the still; its sound piece plays on unlinked.
-  const clips = timeline.clips.flatMap(item => item.id === middleId ? [stillOf(middle, imageAssetId, stillId, middle.start, middle.duration)]
+  const clips = timeline.clips.flatMap(item => item.id === middleId ? [stillOf(middle, imageAssetId, stillId, middle.start, middle.duration, middle.start)]
     : item.id === middle.linkedClipId ? [{ ...item, linkedClipId: undefined }] : [item]);
   return normalizeTimeline({ ...timeline, clips });
 }
