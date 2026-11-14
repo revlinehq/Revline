@@ -1,0 +1,1 @@
+- Posting: Connected accounts and the group picker drop their explanatory copy; the account count sits beside the Accounts heading and the star reads Default. Why: the founder found the page too wordy.
