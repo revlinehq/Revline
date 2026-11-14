@@ -9,26 +9,35 @@
 .assistant-result-card.result-error>svg{color:#c3853c}
 .assistant-result-card.result-prepared>svg{color:var(--muted-foreground);opacity:.6}
 @media(prefers-reduced-motion:reduce){.assistant-result-card .animate-spin{animation:none}}
-/* A run's Thought and steps are shadcn Trace rows; only their spacing and text in the chat live here. */
-.run-row{font-size:12px}
-.run-steps{display:flex;flex-direction:column;gap:8px}
-.run-step{font-size:12px}
-.run-step-line{max-width:100%;font-size:12px}
-.run-step-reason{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d9a15a}
-.run-step-details{margin-top:4px}
-.run-step-tool{margin:0;font-size:11px;color:var(--ws-muted,#9a9a9a);overflow-wrap:anywhere}
-.run-step-full-reason{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a);overflow-wrap:anywhere}
-.run-thought-preview{margin:4px 0 0;padding-left:24px;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.run-thought-text{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;scrollbar-width:none;font-size:12px;line-height:1.55;color:var(--ws-muted,#9a9a9a)}.run-thought-text::-webkit-scrollbar{display:none}
-.run-thought-text>p{margin:0;white-space:pre-wrap}
-.run-thought-text>.run-thought-note{color:var(--foreground)}
-.run-thought-steps{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ws-muted,#9a9a9a);opacity:.8}
-.run-thought-steps>span{min-width:0;max-width:85%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Images a step returned (frames), under the step's details. */
-.run-step-images{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
-.run-step-image{display:flex;flex-direction:column;gap:3px;width:150px;padding:0;border:0;background:none;color:var(--ws-muted,#9a9a9a);font-size:11px;text-align:left;cursor:zoom-in}
-.run-step-image img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;box-shadow:inset 0 0 0 1px #ffffff14;background:#0006}
-.run-step-image:hover img{box-shadow:0 0 0 1px #ffffff40}
-.run-step-image span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A run's steps: a heading, then plain rows under a thin left rule. Frame reads add a grid of what they looked at. */
+.run-steps{display:flex;flex-direction:column;min-width:0;font-size:13px;line-height:20px}
+.run-steps-heading{display:flex;align-items:center;gap:8px;width:fit-content;max-width:100%;padding:0;border:0;background:none;color:var(--foreground);font:inherit;text-align:left;cursor:pointer;outline:none}
+.run-steps-heading:hover>span:first-of-type{color:#fff}
+.run-steps-mark{width:16px;height:16px;flex:none;color:#3FB27F}
+.run-steps-heading[data-tone=running] .run-steps-mark,.run-steps-heading[data-tone=stopped] .run-steps-mark{color:var(--muted-foreground)}
+.run-steps-heading[data-tone=error] .run-steps-mark{color:#c3853c}
+.run-step-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 0 7px;padding:2px 0 2px 15px;border-left:1px solid #ffffff1f}
+.run-step{display:flex;flex-direction:column;min-width:0}
+.run-step-line{display:flex;align-items:center;gap:10px;min-width:0}
+.run-step-mark{width:14px;height:14px;flex:none;color:#3FB27F}
+.run-step:is([data-state=running],[data-state=stopped]) .run-step-mark{color:var(--muted-foreground)}
+.run-step[data-state=error] .run-step-mark{color:#d9a15a}
+.run-step-label{flex:none;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:color-mix(in srgb,var(--foreground) 88%,transparent)}
+.run-step-detail{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.run-step-reason{margin:2px 0 0 24px;font-size:12px;line-height:1.45;color:#d9a15a;overflow-wrap:anywhere}
+/* Six 9:16 frames fit the chat width (about 46 x 82), 6 px apart; landscape frames go four to a line. */
+.run-frame-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px 6px;max-width:306px;margin:8px 0 2px 24px}
+.run-frame-grid.is-landscape{grid-template-columns:repeat(4,minmax(0,1fr))}
+.run-frame-grid.is-sheet{grid-template-columns:minmax(0,1fr)}
+.run-frame{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:0;border:0;background:none;color:var(--muted-foreground);font-size:11px;line-height:14px;font-variant-numeric:tabular-nums;cursor:zoom-in;outline:none}
+.run-frame img{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:6px;background:#1f1f1f;box-shadow:inset 0 0 0 1px #ffffff14}
+.run-frame-grid.is-landscape .run-frame img{aspect-ratio:16/9}
+.run-frame-tile{position:relative;display:block;width:100%;aspect-ratio:9/16;overflow:hidden;border-radius:6px;background:#1f1f1f;box-shadow:inset 0 0 0 1px #ffffff14}
+.run-frame-grid.is-landscape .run-frame-tile{aspect-ratio:16/9}
+.run-frame-grid .run-frame .run-frame-tile .run-frame-crop{position:absolute;max-width:none;height:auto;aspect-ratio:auto;border-radius:0;background:none;box-shadow:none}
+.run-frame:hover .run-frame-tile{box-shadow:0 0 0 1px #ffffff40}
+.run-frame-grid.is-sheet .run-frame img{aspect-ratio:auto;height:auto;object-fit:contain}
+.run-frame:hover img{box-shadow:0 0 0 1px #ffffff40}
+.run-frame>span:last-child:not(.run-frame-tile){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .run-step-image-dialog{max-width:min(1200px,92vw)!important;width:auto}
 .run-step-image-dialog img{display:block;width:min(1150px,86vw);max-width:100%;max-height:80vh;height:auto;object-fit:contain;border-radius:8px}
