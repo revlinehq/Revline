@@ -87,6 +87,7 @@ export const BASE_TOOLS = [
   'applyTextTemplate',
   'configureTextTemplate',
   'cropClip',
+  'blurRegion',
   'applyLayout',
   'fitClip',
   'resetVisual',

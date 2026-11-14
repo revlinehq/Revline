@@ -1,0 +1,17 @@
+/* Blur regions on the preview: outlines over the live picture, handles on the selected one. Static, no motion. */
+.region-controls{position:absolute;inset:0;z-index:7;cursor:crosshair;touch-action:none}
+.region-box{position:absolute;border:1px dashed #ffffffb3;box-shadow:0 0 0 1px #0006;pointer-events:none}
+.region-box[data-selected]{border-style:solid;border-color:#fff}
+.region-draft{border-style:solid;border-color:#fff;background:#ffffff14}
+.region-controls .region-body[data-slot=button]{position:absolute;inset:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;transition:none;cursor:move;pointer-events:auto;touch-action:none;outline:none}
+.region-controls .region-body[data-slot=button]:hover{background:#ffffff14}
+.region-controls .region-body[data-slot=button]:focus,.region-controls .region-body[data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.region-tag{position:absolute;left:-1px;top:-1px;transform:translateY(-100%);padding:1px 5px;border-radius:3px 3px 0 0;background:#2a2a2a;color:#f2f2f2;font-size:calc(10px / var(--preview-view-scale,1));line-height:1.4;pointer-events:none}
+.region-controls .region-handle[data-slot=button]{position:absolute;z-index:1;width:24px;height:24px;min-width:0;display:grid;place-items:center;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;transition:none;pointer-events:auto;touch-action:none;transform:translate(-50%,-50%) scale(calc(1 / var(--preview-view-scale,1)));outline:none}
+.region-handle span{width:8px;height:8px;background:#fff;border:1px solid #2a2a2a;pointer-events:none}
+.region-controls .region-handle[data-slot=button]:hover span{background:#d4d4d4}
+.region-controls .region-handle[data-slot=button]:focus,.region-controls .region-handle[data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.region-controls .region-handle-nw{left:0;top:0;cursor:nwse-resize}.region-controls .region-handle-n{left:50%;top:0;cursor:ns-resize}.region-controls .region-handle-ne{left:100%;top:0;cursor:nesw-resize}
+.region-controls .region-handle-w{left:0;top:50%;cursor:ew-resize}.region-controls .region-handle-e{left:100%;top:50%;cursor:ew-resize}
+.region-controls .region-handle-sw{left:0;top:100%;cursor:nesw-resize}.region-controls .region-handle-s{left:50%;top:100%;cursor:ns-resize}.region-controls .region-handle-se{left:100%;top:100%;cursor:nwse-resize}
+.region-controls .region-handle[data-slot=button]:hover{background:transparent}

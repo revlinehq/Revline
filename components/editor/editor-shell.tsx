@@ -416,6 +416,9 @@ export function EditorShell(p: EditorShellProps) {
   const sourceSuggestions = suggestionAsset && suggestionClip && suggestionAsset.analysis?.understanding?.suggestions?.length ? { sourceName: suggestionAsset.fileName, clipId: suggestionClip.id, items: suggestionAsset.analysis.understanding.suggestions } : undefined;
   const cropping = !!clip && clip.id === croppingClip;
   useEffect(() => { if (croppingClip && (!clip || clip.id !== croppingClip)) setCroppingClip(null); }, [clip?.id, croppingClip]);
+  const regionEdit = useEditorState(state => state.regionEdit);
+  // Region drawing belongs to one clip: selecting another, or an agent edit taking the editor, ends it.
+  useEffect(() => { if (regionEdit && (editing || !clip || clip.id !== regionEdit.clipId)) store.setState({ regionEdit: null }); }, [regionEdit, editing, clip?.id, store]);
   // Moving the playhead never edits the timeline, so it stays free while the AI edits.
   const seek = useCallback((n: number) => {
     const t = frameSeekTime(n, timeline.fps, duration);

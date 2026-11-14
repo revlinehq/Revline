@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { samplingKey, type PlainAudioPlan, type PlainExportPlan, type PlainFade, type PlainLayer } from '../editor/plain-export';
+import { samplingKey, type PlainAudioPlan, type PlainExportPlan, type PlainFade, type PlainLayer, type PlainRegion } from '../editor/plain-export';
 import { RENDER_X264, plainExportResources, renderResources } from '../render-resources.mjs';
 import { reuseMediaFile } from './media-file-cache';
 import { forEachLimited } from './run-limited';
@@ -140,9 +140,9 @@ function clipChain(input: number, segment: Extract<PlainExportPlan['video'][numb
  * binomial passes of the given total sigma, sampling clamped to the source edge) and then the
  * grade's exposure, RGB times 2^stops on the display-referred values, clamped.
  */
-function lookFilters(layer: PlainLayer) {
-  if (!(layer.blur > 0) && !layer.exposure) return '';
-  const stages = ['scale=in_color_matrix=bt709:in_range=tv,format=gbrp'];
+function lookFilters(layer: PlainLayer, rgb = false) {
+  if (!(layer.blur > 0) && !layer.exposure) return rgb ? ',scale=out_color_matrix=bt709:out_range=tv,format=yuv420p' : '';
+  const stages = rgb ? [] : ['scale=in_color_matrix=bt709:in_range=tv,format=gbrp'];
   if (layer.blur > 0) {
     // Smeared borders stand in for the shader's clamp-to-edge sampling.
     const pad = Math.ceil(layer.blur * 3) + 2;
@@ -151,6 +151,43 @@ function lookFilters(layer: PlainLayer) {
   if (layer.exposure) { const gain = num(2 ** layer.exposure); stages.push(`colorchannelmixer=rr=${gain}:gg=${gain}:bb=${gain}`); }
   stages.push('scale=out_color_matrix=bt709:out_range=tv,format=yuv420p');
   return `,${stages.join(',')}`;
+}
+
+/** The frames of a layer (counted from its first visible frame) on which a region shows; undefined when it never does. */
+function regionFrames(region: PlainRegion, layer: PlainLayer, fps: number) {
+  // Frame n shows clip-local time (phase + n) / fps; the browser's range is half-open with the same tolerance.
+  const first = region.start === undefined ? 0 : Math.max(0, Math.ceil(region.start * fps - layer.phase - 1e-6 * fps - 1e-9));
+  const end = region.end === undefined ? layer.frames : Math.min(layer.frames, Math.ceil(region.end * fps - layer.phase - 1e-6 * fps - 1e-9));
+  return end > first ? { first, end } : undefined;
+}
+
+/**
+ * The browser's region passes on a layer's scaled raster, in display RGB: each region in turn is cut out, blurred
+ * (a Gaussian over a margin wide enough to reach past its edge, borders smeared like the shader's clamp)
+ * or averaged into its blocks and scaled back without filtering, then laid back over the raster on the
+ * frames it shows. Returns graph lines from `input` to `[output]`, which stays gbrp.
+ */
+function regionGraph(input: string, layer: PlainLayer, fps: number, output: string): string[] {
+  const regions = (layer.regions ?? []).flatMap(region => { const frames = regionFrames(region, layer, fps); return frames ? [{ region, frames }] : []; });
+  const lines: string[] = [];
+  let current = `${output}r0`;
+  lines.push(`${input}scale=in_color_matrix=bt709:in_range=tv,format=gbrp[${regions.length ? current : output}]`);
+  // Each region is cut from the picture with the earlier ones already drawn, and laid over it: the later one wins where they overlap.
+  regions.forEach(({ region, frames }, index) => {
+    const { x, y, width, height } = region;
+    let cut: string;
+    if (region.mode === 'pixelate') cut = `crop=${width}:${height}:${x}:${y}:exact=1,scale=${region.columns}:${region.rows}:flags=area,scale=${width}:${height}:flags=neighbor`;
+    else {
+      const margin = Math.ceil(region.sigma * 3) + 2;
+      const left = Math.max(0, x - margin), top = Math.max(0, y - margin), right = Math.min(layer.scaleWidth, x + width + margin), bottom = Math.min(layer.scaleHeight, y + height + margin);
+      cut = `crop=${right - left}:${bottom - top}:${left}:${top}:exact=1,pad=${right - left + 2 * margin}:${bottom - top + 2 * margin}:${margin}:${margin},fillborders=left=${margin}:right=${margin}:top=${margin}:bottom=${margin}:mode=smear,gblur=sigma=${num(region.sigma)}:steps=4,crop=${width}:${height}:${x - left + margin}:${y - top + margin}:exact=1`;
+    }
+    const enable = frames.first === 0 && frames.end >= layer.frames ? '' : `:enable=gte(n\\,${frames.first})*lt(n\\,${frames.end})`;
+    const next = index === regions.length - 1 ? output : `${output}r${index + 1}`;
+    lines.push(`[${current}]split=2[${output}b${index}][${output}c${index}]`, `[${output}c${index}]${cut}[${output}q${index}]`, `[${output}b${index}][${output}q${index}]overlay=x=${x}:y=${y}:format=gbrp${enable}[${next}]`);
+    current = next;
+  });
+  return lines;
 }
 
 /**
@@ -165,7 +202,7 @@ function stackChain(segment: Extract<PlainExportPlan['video'][number], { kind: '
   const samplings = [...new Set(segment.layers.map(samplingKey))];
   const looks = new Map<string, PlainLayer[]>();
   for (const layer of segment.layers) {
-    const key = JSON.stringify([samplingKey(layer), layer.scaleWidth, layer.scaleHeight, layer.crop, layer.blur, layer.exposure]);
+    const key = JSON.stringify([samplingKey(layer), layer.scaleWidth, layer.scaleHeight, layer.crop, layer.blur, layer.exposure, layer.regions ?? null]);
     looks.set(key, [...looks.get(key) ?? [], layer]);
   }
   const split = (source: string, count: number, prefix: string) => count === 1 ? [source] : (graph.push(`${source}split=${count}${Array.from({ length: count }, (_, index) => `[${prefix}_${index}]`).join('')}`), Array.from({ length: count }, (_, index) => `[${prefix}_${index}]`));
@@ -178,7 +215,11 @@ function stackChain(segment: Extract<PlainExportPlan['video'][number], { kind: '
   const placed = new Map<PlainLayer, string>();
   for (const [index, group] of [...looks.values()].entries()) {
     const [layer] = group, { crop } = layer;
-    graph.push(`${sampled.get(samplingKey(layer))!.shift()}${colorFilters(sources[samplings.indexOf(samplingKey(layer))].video, layer.scaleWidth, layer.scaleHeight)}${lookFilters(layer)},crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}:exact=1[${label}l${index}]`);
+    const decoded = `${sampled.get(samplingKey(layer))!.shift()}${colorFilters(sources[samplings.indexOf(samplingKey(layer))].video, layer.scaleWidth, layer.scaleHeight)}`;
+    if (layer.regions?.length) {
+      graph.push(...regionGraph(`${decoded},`, layer, fps, `${label}g${index}`));
+      graph.push(`[${label}g${index}]${lookFilters(layer, true).slice(1)},crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}:exact=1[${label}l${index}]`);
+    } else graph.push(`${decoded}${lookFilters(layer)},crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}:exact=1[${label}l${index}]`);
     for (const [copy, output] of split(`[${label}l${index}]`, group.length, `${label}l${index}`).entries()) placed.set(group[copy], output);
   }
   graph.push(`color=c=black:s=${width}x${height}:r=${fps}:d=${num((segment.frames + 1) / fps)},format=yuv420p,trim=end_frame=${segment.frames},setsar=1,setpts=PTS-STARTPTS[${label}b0]`);

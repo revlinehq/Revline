@@ -112,6 +112,17 @@ export type MaskGeometry = { x: number; y: number; width: number; height: number
 export type MaskKey = MaskGeometry & { time: number };
 export type ClipMask = { shape: MaskShape; invert?: boolean; radius?: number; points?: number[][]; text?: string; active?: { start: number; end: number }; keys: MaskKey[] };
 
+// blur-regions
+export const BLUR_REGION_MODES = ['blur', 'pixelate'] as const;
+export type BlurRegionMode = typeof BLUR_REGION_MODES[number];
+/**
+ * A rectangle of a video clip's own frame that is blurred or pixelated, for hiding emails, faces or plates.
+ * x/y/width/height are fractions (0..1) of the full source frame, before crop, so the region stays on the
+ * same pixels whatever the framing. Strength is 1..100. start/end bound it in SOURCE seconds of the clip's media
+ * (half-open), so trims, splits and speed changes keep it on the same moment of the footage; omitted, it covers the clip.
+ */
+export type BlurRegion = { x: number; y: number; width: number; height: number; mode: BlurRegionMode; strength: number; start?: number; end?: number };
+
 // clip-outline
 /** A stroke and glow traced around a clip's visible pixels. On a cut-out (alpha video)
  * it follows the subject's silhouette. Pixel sizes are measured at 1080 output height. */
@@ -232,6 +243,8 @@ export type Clip = {
   turbulentDisplace?: TurbulentDisplace;
   lightSweep?: LightSweep;
   softBlur?: SoftBlur;
+  /** Blurred or pixelated rectangles of the clip's own frame (lib/editor/blur-regions.ts). */
+  blurRegions?: BlurRegion[];
   /** Render-time background drawn from this clip's own frames; never separate clips (lib/editor/mirror-blur-layout.ts). */
   backgroundFill?: BackgroundFill;
   frameDistortion?: FrameDistortion;

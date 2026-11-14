@@ -11,6 +11,8 @@ export type EditorState = {
   selectedId: string | null; selectedIds:string[]; playhead: number; playing: boolean; muted: boolean;
   zoom: number; snapping: boolean; ripple: boolean; tool:'select'|'blade'; /** 'auto' compacts rows only when the layers don't fit the timeline's height; true/false is the user's choice. */
   compactTracks:boolean|'auto'; timelineCollapsed:boolean; scrubbing:boolean;
+  /** Drawing blur regions on this clip in the preview, and the region the inspector edits (lib/editor/blur-regions.ts). */
+  regionEdit:{clipId:string;index:number|null}|null;
   edit: (next: Timeline) => void;
   replace: (next: Timeline, remember?: boolean | Timeline[]) => void;
   recover: (next: Timeline) => void;
@@ -36,7 +38,7 @@ export function createEditorStore(timeline: Timeline, history: Timeline[] = []) 
     return {selectedIds,selectedId:state.selectedId&&ids.has(state.selectedId)?state.selectedId:selectedIds.at(-1)??null};
   };
   return createStore<EditorState>()((set, get) => ({
-    timeline, history: history.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline), future: [], selectedId: null, selectedIds:[], playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, ripple: savedRipple(), tool:'select', compactTracks:'auto',timelineCollapsed:true,scrubbing:false,
+    timeline, history: history.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline), future: [], selectedId: null, selectedIds:[], regionEdit:null, playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, ripple: savedRipple(), tool:'select', compactTracks:'auto',timelineCollapsed:true,scrubbing:false,
     beginUndoGroup: key => { if (undoGroup?.key !== key) undoGroup = { key, recorded: false }; },
     endUndoGroup: () => { undoGroup = null; },
     // A gesture writes the timeline: its cuts land on the frame grid here (lib/editor/frame-grid.ts).

@@ -113,6 +113,7 @@ export const clipValidator = v.object({
   colorGrade: v.optional(colorGradeValidator), zoomBlur: v.optional(zoomBlurValidator), glitch: v.optional(glitchValidator), invert: v.optional(invertValidator), dither: v.optional(ditherValidator),
   neonEdges:v.optional(v.object({enabled:v.boolean(),amount:v.number(),color:v.string(),detail:v.number(),threshold:v.number(),glow:v.number()})),
   softBlur:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),
+  blurRegions:v.optional(v.array(v.object({x:v.number(),y:v.number(),width:v.number(),height:v.number(),mode:v.union(v.literal('blur'),v.literal('pixelate')),strength:v.number(),start:v.optional(v.number()),end:v.optional(v.number())}))),
   backgroundFill:v.optional(v.object({kind:v.literal('mirror-blur'),blur:v.number(),darken:v.number()})),
   flip:v.optional(v.object({horizontal:v.optional(v.boolean()),vertical:v.optional(v.boolean())})),
   frameCorners:v.optional(v.object({enabled:v.boolean(),amount:v.number()})),

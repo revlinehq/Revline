@@ -40,6 +40,7 @@ import {EFFECT_KEYFRAME_CONTROLS,effectKeyframesPatch} from '../../lib/editor/ef
 import {MOTION_EASINGS} from '../../lib/editor/motion-path';
 import {SPEED_RAMP_PRESET_IDS,presetAnchors,type SpeedRampPreset} from '../../lib/editor/speed-ramp';
 import {bakeMaskAnchors} from '../../lib/editor/masks';
+import {DEFAULT_BLUR_REGION_STRENGTH,MAX_BLUR_REGIONS,MIN_BLUR_REGION_SIZE,frameRectToSource,normalizeBlurRegion,regionLocalTime,regionSourceTime,sourceRectToFrame} from '../../lib/editor/blur-regions';
 import {attachMaskPatch,attachOverlayPatch,pointsToSamples,streamedAttachmentPatch} from '../../lib/editor/tracking-attach';
 import {CAMERA_ZOOM_RANGE,SMOOTH_ZOOM_EASINGS} from '../../lib/editor/smooth-zoom-settings';
 import { modelTimeline, modelAssetAnalysis, modelAssetAnalysisWindows, OPTIONAL_UNDERSTANDING_NOTE } from "../../lib/ai/editor-context";
@@ -2125,6 +2126,38 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (input.keyframes.some(key => key.time > clip.duration + 1e-6)) throw new Error('Mask keyframes must fit inside the clip, in clip-local seconds.');
       const keys = bakeMaskAnchors(input.keyframes.map(key => ({ ...key, rotation: key.rotation ?? 0, feather: key.feather ?? 0 })), clip.motionOffset ?? 0);
       return patchClip(t, clip.id, { ...tracking, mask: { shape: input.shape, ...(input.invert ? { invert: true } : {}), ...(input.radius !== undefined ? { radius: input.radius } : {}), ...(input.points ? { points: input.points } : {}), ...(input.text ? { text: input.text } : {}), keys } });
+    }) }),
+    blurRegion: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.blurRegion, description: "Blur or pixelate a rectangle of a video clip to hide private details (emails, names, faces, plates, keys) while the rest stays sharp. x/y (top-left) and width/height are 0..1 fractions of the clip's SOURCE frame by default; space:'frame' takes them as fractions of the rendered output frame (what getFrames shows) and converts through the clip's static framing (not for rotated/flipped clips). mode blur (default) or pixelate; strength 1..100 (default 60; 40+ makes text unreadable). start/end: optional CLIP-LOCAL seconds, half-open; omit for the whole clip. They are saved as SOURCE seconds of the media, so inspectClip lists blurRegions times in source seconds and later trims, splits and speed changes keep the region on the same moment; replace keeps a region's saved times unless you give new ones. A clip holds up to 8 regions: each call adds one, replace:index rewrites one (omitted fields keep their values), remove:index deletes one, clear:true removes all (indexes as inspectClip lists them). Static rectangles only; moving content needs one region per stretch with start/end. Preview and every export draw it identically; it keeps exports on the fast path. Saves immediately.", inputSchema: z.object({ clipId: z.string().min(1), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), width: z.number().min(MIN_BLUR_REGION_SIZE).max(1).optional(), height: z.number().min(MIN_BLUR_REGION_SIZE).max(1).optional(), space: z.enum(['source', 'frame']).optional(), mode: z.enum(['blur', 'pixelate']).optional(), strength: z.number().min(1).max(100).optional(), start: z.number().min(0).optional(), end: z.number().positive().optional(), replace: z.number().int().min(0).max(MAX_BLUR_REGIONS - 1).optional(), remove: z.number().int().min(0).max(MAX_BLUR_REGIONS - 1).optional(), clear: z.boolean().optional() }).strict(), execute: async (_ctx, input) => checkpoint(t => {
+      const clip = find(t, input.clipId);
+      if (clip.kind !== 'video') throw new Error('Choose a video clip; blur regions apply to video.');
+      const current = clip.blurRegions ?? [];
+      if (input.clear) return patchClip(t, clip.id, { blurRegions: undefined });
+      if (input.remove !== undefined) {
+        if (input.remove >= current.length) throw new Error(`This clip has ${current.length} blur region${current.length === 1 ? '' : 's'}; remove takes an index below that.`);
+        const rest = current.filter((_, index) => index !== input.remove);
+        return patchClip(t, clip.id, { blurRegions: rest.length ? rest : undefined });
+      }
+      const previous = input.replace !== undefined ? current[input.replace] : undefined;
+      if (input.replace !== undefined && !previous) throw new Error(`This clip has ${current.length} blur region${current.length === 1 ? '' : 's'}; replace takes an index below that.`);
+      if (!previous && (input.x === undefined || input.y === undefined || input.width === undefined || input.height === undefined)) throw new Error('Give x, y, width and height of the rectangle (0..1 fractions), or clear/remove.');
+      if (!previous && current.length >= MAX_BLUR_REGIONS) throw new Error(`A clip holds at most ${MAX_BLUR_REGIONS} blur regions; replace or remove one.`);
+      const source: { width?: number; height?: number } = assets.find(asset => asset._id === clip.assetId) ?? {}, canvas = dimensions(t.aspectRatio);
+      // Omitted fields come from the region being replaced, in the space the call uses.
+      const kept = previous && input.space === 'frame' ? (source.width && source.height ? sourceRectToFrame(previous, clip, { width: source.width, height: source.height }, canvas) : undefined) : previous;
+      if (previous && !kept && [input.x, input.y, input.width, input.height].some(value => value === undefined)) throw new Error('Give x, y, width and height together in frame space for this clip.');
+      let rect = { x: input.x ?? kept!.x, y: input.y ?? kept!.y, width: input.width ?? kept!.width, height: input.height ?? kept!.height };
+      if (input.space === 'frame') rect = frameRectToSource(rect, clip, source, canvas);
+      if (rect.x + rect.width > 1 + 1e-6 || rect.y + rect.height > 1 + 1e-6) throw new Error('The rectangle runs past the frame edge: keep x + width and y + height within 1.');
+      // Clip-local in, source seconds out; a replaced region keeps its saved times unless new ones are given.
+      const start = input.start !== undefined ? input.start : previous?.start !== undefined ? regionLocalTime(clip, previous.start) : undefined;
+      const end = input.end !== undefined ? input.end : previous?.end !== undefined ? regionLocalTime(clip, previous.end) : undefined;
+      if (input.start !== undefined && input.start >= clip.duration - 1e-6) throw new Error(`start is clip-local seconds and must be below the clip's ${Math.round(clip.duration * 100) / 100} s.`);
+      if (start !== undefined && end !== undefined && end <= start) throw new Error('end must be after start.');
+      const savedStart = input.start !== undefined ? (input.start > 0 ? regionSourceTime(clip, input.start) : undefined) : previous?.start;
+      const savedEnd = input.end !== undefined ? (input.end < clip.duration - 1e-6 ? regionSourceTime(clip, input.end) : undefined) : previous?.end;
+      const region = normalizeBlurRegion({ ...rect, mode: input.mode ?? previous?.mode ?? 'blur', strength: input.strength ?? previous?.strength ?? DEFAULT_BLUR_REGION_STRENGTH, ...savedStart !== undefined ? { start: savedStart } : {}, ...savedEnd !== undefined ? { end: savedEnd } : {} });
+      const next = input.replace !== undefined ? current.map((item, index) => index === input.replace ? region : item) : [...current, region];
+      return patchClip(t, clip.id, { blurRegions: next });
     }) }),
     trackPoints: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.trackPoints, description: "Start durable pixel tracking forward and backward from one TIMELINE seed time, including moving cameras. seed: {kind:'point',x,y} or {kind:'box',box} in normalized SOURCE coordinates, {kind:'target',targetId} from inspectFrames, or {kind:'object',noun} (paid Florence-2 grounding; verify its box). start/end are TIMELINE bounds, default the whole clip; there is no length limit and a confirmed cut ends a direction. Returns trackId at once; getTrack reads progress and samples, and attachToTrack can use it while it runs. No timeline changes.", inputSchema: trackInput, execute: async (_ctx, input) => reportAnalysisFailure(async () => { const reference = await measurePixelTrack(input); return { trackId: reference.trackId, status: 'queued', note: 'Tracking continues in the background. Use getTrack for status and dense pages, or attachToTrack now.' }; }) }),
     getTrack: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getTrack, description: "Read a pixel track's durable status, confidence and stop reasons. Completed tracks return a dense page of SOURCE-time samples and, for a noun seed, summary.grounding with the detector-proposed box/provider/time. Inspect that box in a source frame; detection is not verified identity and can guess when an object is absent. Pass nextCursor as cursor to read successive pages without dropping frames, or time (SOURCE seconds) to read a local window with smoothing neighbors. No duration/frame cap and no timeline changes.", inputSchema: z.object({ trackId: z.string().min(1), cursor: z.number().nonnegative().optional(), time: z.number().nonnegative().optional() }).strict(), execute: async (_ctx, input) => ctx.runQuery(internal.pixelTracks.pageForRun, { ...run, ...input }) }),

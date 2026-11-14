@@ -1,0 +1,1 @@
+- Editor: blur or pixelate a rectangle of a video clip (drawn on the preview or set by the assistant's new blurRegion tool), identical in preview, fast export and browser export. Why: the assistant could not hide email addresses in a production screen recording (#412).

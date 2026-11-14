@@ -117,6 +117,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   configureVisualFade: { effect: 'timeline', mcp: 'exclusive', label: ['Adjusting footage fades', 'Adjusted footage fades'] },
   animateEffect: { effect: 'timeline', mcp: 'exclusive' },
   setMask: { effect: 'timeline', mcp: 'exclusive' },
+  blurRegion: { effect: 'timeline', mcp: 'exclusive', label: ['Blurring a region', 'Blurred a region'] },
   trackPoints: { effect: 'analysis', mcp: 'exclusive' },
   getTrack: { effect: 'read', mcp: 'read' },
   attachToTrack: { effect: 'timeline', mcp: 'exclusive' },

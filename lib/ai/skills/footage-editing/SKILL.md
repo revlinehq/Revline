@@ -1,6 +1,6 @@
 ---
 name: "footage-editing"
-description: "Edits the user's footage and audio (talking heads, vlogs, podcasts, reels, screen recordings): cuts, speech cleanup, captions, b-roll, layers, transitions and effects. Read before editing footage or audio; small fixes to an existing edit start with page edit-lanes."
+description: "Edits the user's footage and audio (talking heads, vlogs, podcasts, reels, screen recordings): cuts, speech cleanup, captions, b-roll, layers, transitions, effects, and blurring or pixelating private details (emails, faces) with blurRegion. Read before editing footage or audio; small fixes to an existing edit start with page edit-lanes."
 ---
 # Editing footage
 

@@ -11,7 +11,8 @@ import { VISUAL_EFFECT_KEYS } from './visual-effects';
 import { validateVisualFade, visualFadeClock, visualFadeGain } from './visual-fades';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { textLayerFrame } from './text-layers';
-import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
+import { blurRegionSigma, pixelateBlocks, regionLocalTime } from './blur-regions';
+import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type BlurRegion, type Clip, type MediaAsset, type Timeline } from './types';
 
 /** Where a layered clip's frames come from: HyperFrames' sampling of its source, as for a full-frame clip. */
 type PlainSampling = {
@@ -49,7 +50,15 @@ export type PlainLayer = PlainSampling & {
   exposure: number;
   /** Opacity ramp of the layer, composited with alpha over the layers beneath. */
   fade?: PlainFade;
+  /** Blur regions drawn on the scaled raster before the soft blur and grade, in paint order. */
+  regions?: PlainRegion[];
 };
+/**
+ * A blur region of a layer (lib/editor/blur-regions.ts) on its scaled raster, before the crop: an integer
+ * rectangle, blurred with a Gaussian of `sigma` raster pixels or averaged into `columns` x `rows` blocks.
+ * `start`/`end` bound it in the clip's local seconds (half-open), as the browser's region passes do.
+ */
+export type PlainRegion = { x: number; y: number; width: number; height: number; start?: number; end?: number } & ({ mode: 'blur'; sigma: number } | { mode: 'pixelate'; columns: number; rows: number });
 /**
  * A crossfade between two layers of a stack: layers before `from` are painted first, then `from`
  * and `to` are each painted over a copy of that base and the two pictures mixed linearly from the
@@ -101,7 +110,7 @@ export const PLAIN_EXPORT_MAX_PIECE_SECONDS = 6;
 // HyperFrames snaps clip edges within 1/1000 frame to the frame grid (parityContract FRAME_BOUNDARY_EPSILON).
 const FRAME_BOUNDARY_EPSILON = 1e-3;
 const SHARED_KEYS = new Set<keyof Clip>(['id', 'kind', 'assetId', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'linkedClipId', 'audioSeparated', 'effectPreset', 'motion', 'motionOffset', 'approval', 'approvedSections']);
-const VIDEO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'fit', 'transform', 'crop', 'blendMode', 'focus', 'framingCuts', 'visualFade', 'visualFadeTiming', 'flip', 'backgroundFill', ...VISUAL_EFFECT_KEYS]);
+const VIDEO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'fit', 'transform', 'crop', 'blendMode', 'focus', 'framingCuts', 'visualFade', 'visualFadeTiming', 'flip', 'backgroundFill', 'blurRegions', ...VISUAL_EFFECT_KEYS]);
 const AUDIO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'audio', 'audioFadeTiming']);
 // Everything the browser text layer reads for a clip without a template, gradient or motion.
 const TEXT_KEYS = new Set<keyof Clip>(['id', 'kind', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'text', 'fontSize', 'color', 'background', 'x', 'y', 'textStyle', 'fontFamily', 'transform', 'blendMode', 'animation', 'textAnimationTiming', 'approval', 'approvedSections']);
@@ -148,7 +157,7 @@ function quarterTurn(rotation: number): 0 | 90 | 180 | 270 | undefined {
 }
 
 /** What a video clip needs beyond one full-canvas footage layer; undefined when it is plain. */
-type LayerLook = { transform: typeof DEFAULT_TRANSFORM; flip: { horizontal: boolean; vertical: boolean }; rotate: 0 | 90 | 180 | 270; blur: number; exposure: number; fade?: PlainFade; layered: boolean };
+type LayerLook = { transform: typeof DEFAULT_TRANSFORM; flip: { horizontal: boolean; vertical: boolean }; rotate: 0 | 90 | 180 | 270; blur: number; exposure: number; fade?: PlainFade; regions?: BlurRegion[]; layered: boolean };
 function visualLook(clip: Clip, asset: MediaAsset | undefined, projectFps: number): string | LayerLook {
   if (!asset || asset.kind !== 'video') return 'a video clip references unavailable or mismatched media';
   if (!(asset.width! > 0 && asset.height! > 0)) return 'a video source has no recorded dimensions';
@@ -176,7 +185,9 @@ function visualLook(clip: Clip, asset: MediaAsset | undefined, projectFps: numbe
   }
   const flip = { horizontal: !!clip.flip?.horizontal, vertical: !!clip.flip?.vertical };
   const moved = !near(transform.x, .5) || !near(transform.y, .5) || !near(transform.scale, 1);
-  return { transform, flip, rotate, blur, exposure, fade: fadeOf(clip, projectFps), layered: moved || flip.horizontal || flip.vertical || blur > 0 || exposure !== 0 || cropped || rotate !== 0 };
+  // Regions are drawn on the layer's raster, so a clip with regions takes the stack path.
+  const regions = clip.blurRegions?.length ? clip.blurRegions : undefined;
+  return { transform, flip, rotate, blur, exposure, fade: fadeOf(clip, projectFps), ...regions ? { regions } : {}, layered: moved || flip.horizontal || flip.vertical || blur > 0 || exposure !== 0 || cropped || rotate !== 0 || !!regions };
 }
 
 /** Integer raster matching the browser's calculateVisualRect framing at the export canvas. */
@@ -214,6 +225,24 @@ function layerPlacement(asset: MediaAsset, clip: Clip, look: LayerLook, width: n
     x = Math.round(turned.x); y = Math.round(turned.y);
   }
   return { scaleWidth, scaleHeight, crop, x, y, ...look.rotate ? { rotate: look.rotate } : {} };
+}
+
+/**
+ * A clip's blur regions on its scaled raster, sized as the browser's region passes size them: the blur's
+ * sigma in design pixels scales with the output and the clip, the blocks divide the region of the full
+ * framed source (calculateVisualRect, before the transform) exactly. Times go from source seconds to clip-local seconds.
+ */
+function layerRegions(asset: MediaAsset, clip: Clip, look: LayerLook, width: number, height: number, resolution: number, scaleWidth: number, scaleHeight: number): PlainRegion[] | undefined {
+  if (!look.regions) return undefined;
+  const rect = calculateVisualRect(asset.width!, asset.height!, width, height, clip.crop, undefined, clip.fit ?? 'cover');
+  return look.regions.map(region => {
+    const x = Math.min(scaleWidth - 1, Math.max(0, Math.round(region.x * scaleWidth))), y = Math.min(scaleHeight - 1, Math.max(0, Math.round(region.y * scaleHeight)));
+    const right = Math.min(scaleWidth, Math.max(x + 1, Math.round((region.x + region.width) * scaleWidth))), bottom = Math.min(scaleHeight, Math.max(y + 1, Math.round((region.y + region.height) * scaleHeight)));
+    const times = { ...region.start !== undefined ? { start: regionLocalTime(clip, region.start) } : {}, ...region.end !== undefined ? { end: regionLocalTime(clip, region.end) } : {} };
+    const box = { x, y, width: right - x, height: bottom - y, ...times };
+    return region.mode === 'pixelate' ? { ...box, mode: 'pixelate' as const, ...pixelateBlocks(region, rect.width, rect.height, resolution) }
+      : { ...box, mode: 'blur' as const, sigma: blurRegionSigma(region.strength) * resolution / 1080 * look.transform.scale };
+  });
 }
 
 function textReason(clip: Clip): string | undefined {
@@ -426,9 +455,14 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
     groupEnd = Math.max(groupEnd, visual.end);
   }
   const sampling = (clip: Clip, first: number): PlainSampling => ({ assetId: clip.assetId!, sourceStart: clip.sourceStart, playbackRate: playbackRateOf(clip), sourceDuration: clip.duration * playbackRateOf(clip), phase: first - clip.start * fps || 0 });
+  const placementWithRegions = (clip: Clip, look: LayerLook) => {
+    const asset = assetMap.get(clip.assetId!)!, placement = layerPlacement(asset, clip, look, width, height);
+    const regions = layerRegions(asset, clip, look, width, height, resolution, placement.scaleWidth, placement.scaleHeight);
+    return { ...placement, ...regions ? { regions } : {} };
+  };
   const layerOf = ({ clip, look, first: start, end: stop }: Visual, from: number, to: number): PlainLayer => ({
     clipId: clip.id, ...sampling(clip, Math.max(start, from)), offset: Math.max(start, from) - from, frames: Math.min(stop, to) - Math.max(start, from),
-    ...layerPlacement(assetMap.get(clip.assetId!)!, clip, look, width, height),
+    ...placementWithRegions(clip, look),
     flip: look.flip, exposure: look.exposure,
     // The editor's soft blur has a standard deviation of half its amount, in 1080p design pixels,
     // measured on the clip's own layout and then scaled with it.

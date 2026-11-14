@@ -6,5 +6,5 @@ import { visualEffectsOf } from './visual-effects';
 
 /** The WebGL effect data for one video or image clip, as the composition installs it and the live preview updates it. */
 export function clipVisualEffectSource(clip: Clip, luts?: TimelineLut[]) {
-  return { ...visualEffectsOf(clip), parallax: clip.parallax, cameraGlideBlur: cameraGlideBlurSource(clip), effectKeyframes: clip.effectKeyframes, motionOffset: clip.motionOffset, ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}), ...(colorFinishSource(clip, luts) ? { colorFinish: colorFinishSource(clip, luts) } : {}) };
+  return { ...visualEffectsOf(clip), parallax: clip.parallax, cameraGlideBlur: cameraGlideBlurSource(clip), effectKeyframes: clip.effectKeyframes, motionOffset: clip.motionOffset, ...(clip.blurRegions?.length ? { blurRegions: clip.blurRegions, regionClock: { sourceStart: clip.sourceStart, playbackRate: clip.playbackRate, speedRamp: clip.speedRamp } } : {}), ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}), ...(colorFinishSource(clip, luts) ? { colorFinish: colorFinishSource(clip, luts) } : {}) };
 }

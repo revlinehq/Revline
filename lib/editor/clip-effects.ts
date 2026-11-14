@@ -17,6 +17,7 @@ import { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 import { validateEffectKeyframes } from './effect-keyframes';
 import { shiftSpeedRamp } from './speed-ramp';
 import { validateMask } from './masks';
+import { validateBlurRegions } from './blur-regions';
 import { validateAudioReactive } from './audio-reactive';
 import { validateColorFinish } from './color-finish';
 const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
@@ -103,6 +104,7 @@ export function validateClipEffects(clip: Clip) {
   validateVisualEffects(clip);
   validateEffectKeyframes(clip.effectKeyframes);
   validateMask(clip);
+  validateBlurRegions(clip);
   validateAudioReactive(clip);
   validateColorFinish(clip);
   if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');

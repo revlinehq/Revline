@@ -16,4 +16,7 @@
 // 47: route public X status pages through the supported downloader before import.
 // 49: report genuine Gemini billing failures and honor durable admission cooldowns.
 // 50: beat maps carry the measured music energy (loudness, low band, onsets) analyzeMusic reads.
-export const MEDIA_PROCESSOR_VERSION = 50;
+// 51: exports draw clip blur regions (lib/editor/blur-regions.ts); an older worker would show what they hide.
+export const MEDIA_PROCESSOR_VERSION = 51;
+/** Renders of a timeline with blur regions need at least this processor. */
+export const BLUR_REGIONS_PROCESSOR_VERSION = 51;
