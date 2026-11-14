@@ -7,7 +7,8 @@ const overlaps = (a: Clip, b: Clip) => a.start < b.start + b.duration - 1e-6 && 
 
 /** Close footage gaps without changing retained source ranges or audio sync (linked sound, and with `audioAssetOf` the
  * unlinked sound of the same take, moves with its picture): every gap on every
- * visual layer in one change (also gaps shorter than a frame), or only between the selected clips. */
+ * visual layer in one change (also gaps shorter than a frame), or only between the selected clips (and before the
+ * first of them when nothing precedes it on its layer, so the head is never left empty). */
 export function closeFootageGaps(timeline: Timeline, selectedIds: readonly string[] = [], onlyTracks?: readonly number[], audioAssetOf?: AudioAssetOf): Timeline {
   const selected = new Set(selectedIds);
   for (const clip of timeline.clips) if (clip.kind === 'audio' && selected.has(clip.id) && clip.linkedClipId) selected.add(clip.linkedClipId);
@@ -19,10 +20,13 @@ export function closeFootageGaps(timeline: Timeline, selectedIds: readonly strin
   const byId = new Map(timeline.clips.map(clip => [clip.id, clip]));
   for (const track of tracks) {
     const row = timeline.clips.filter(clip => layerGroup(clip.kind) === 'visual' && trackOf(clip) === track).sort((a, b) => a.start - b.start);
-    let end = 0, anchored = !selectionOnly;
+    let end = 0, anchored = !selectionOnly, earlier = false;
     for (const clip of row) {
       const included = !selectionOnly || selected.has(clip.id) && media(clip);
-      if (included && !anchored) { end = clip.start; anchored = true; }
+      // A selection joins from its first clip, except at the head of the layer: nothing before it means an empty start,
+      // which is never wanted, so the first selected clip moves to 0 too.
+      if (included && !anchored) { end = earlier ? clip.start : 0; anchored = true; }
+      earlier = true;
       const start = included ? Math.min(clip.start, end) : clip.start;
       if (Math.abs(start - clip.start) > 1e-6) {
         const delta = start - clip.start;
