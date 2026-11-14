@@ -1,0 +1,1 @@
+- Editor assistant: closeGaps on chosen clips also closes an empty head, and moveClips makes room by pushing clips in the way later, or names the clip and the timeDelta that fits. Why: a founder run left a black 0–6.7 s start and a bare "Overlaps a clip" refusal.
