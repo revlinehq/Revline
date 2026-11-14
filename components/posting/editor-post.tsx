@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
+import { AccountPicker } from './account-picker';
 import './editor-post.css';
 
 /** How long a finished or failed post keeps its place beside Export. */
@@ -51,6 +52,8 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState(''), [when, setWhen] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  // Kept here, not in the picker: the popover's content unmounts on close, and reopening must show the same group.
+  const [groupId, setGroupId] = useState<Id<'postingGroups'> | null | undefined>(undefined);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   // Re-read the clock each minute, so a finished post leaves the bar a day later without a reload.
   const [now, setNow] = useState(() => Date.now());
@@ -106,13 +109,8 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
         <div className="editor-post-row"><label htmlFor="editor-post-caption">Caption</label><CopyButton text={caption} /></div>
         <Textarea id="editor-post-caption" className="editor-post-caption" rows={4} maxLength={CAPTION_LIMIT} placeholder="Write a caption" value={caption} onChange={event => setCaption(event.target.value)} />
         <span className="editor-post-label">Post to</span>
-        {!accounts || !platforms ? <p className="editor-post-hint" role="status">Loading your accounts…</p> : accounts.length ? <ul className="editor-post-accounts">{accounts.map(account => {
-          const soon = !live.has(account.platform), usable = !soon && account.status === 'connected';
-          return <li key={account.id} data-disabled={!usable || undefined}><label>
-            <Checkbox disabled={!usable} checked={usable && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-            <span className="editor-post-account">@{account.username}</span><small>{PLATFORM_NAMES[account.platform]}</small>
-          </label>{!soon && !usable && <Link href="/accounts">Reconnect</Link>}</li>;
-        })}</ul> : <ul className="editor-post-accounts">{POSTING_PLATFORMS.map(platform => <li key={platform} data-disabled={!live.has(platform) || undefined}>
+        {!accounts || !platforms ? <p className="editor-post-hint" role="status">Loading your accounts…</p> : accounts.length ? <AccountPicker accounts={accounts} usable={account => account.status === 'connected' && live.has(account.platform)} chosen={chosen} onChange={setChosen} groupId={groupId} onGroupChange={setGroupId} disabled={busy} />
+          : <ul className="editor-post-accounts">{POSTING_PLATFORMS.map(platform => <li key={platform} data-disabled={!live.has(platform) || undefined}>
           <label><Checkbox disabled checked={false} aria-label={PLATFORM_NAMES[platform]} /><span className="editor-post-account">{PLATFORM_NAMES[platform]}</span></label>
           {live.has(platform) && <Link href="/accounts">Connect</Link>}
         </li>)}</ul>}

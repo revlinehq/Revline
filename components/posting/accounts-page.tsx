@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AccountAvatar, PlatformIcon } from './account-avatar';
+import { AccountGroups } from './account-groups';
 import '@/components/dashboard/dash-list.css';
 
 /** Connected social accounts, a card per platform: connect, reconnect, disconnect. While posting is not set up on the server, one line says so and the Connect and Reconnect buttons are off. */
@@ -88,6 +89,8 @@ export function AccountsPage() {
     {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}
+    {accounts && accounts.length > 0 && <AccountGroups accounts={accounts} />}
+    {accounts && accounts.length > 0 && <h2 className="account-groups-title">Accounts</h2>}
     {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
       const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
       return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">

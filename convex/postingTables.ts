@@ -115,5 +115,15 @@ export const postingTables = {
     // What TikTok allowed each chosen TikTok account when the card was made, so the press checks the clip against it again.
     tiktokCreators: v.optional(v.array(tiktokCreator)),
     createdAt: v.number(), expiresAt: v.number(),
+    // The account group the assistant posted to, which the card shows and can switch, and the group's accounts that
+    // were left out because they need reconnecting. Absent on cards made from single accounts.
+    groupId: v.optional(v.id('postingGroups')), skippedAccountIds: v.optional(v.array(v.id('postingAccounts'))),
   }).index('by_owner', ['ownerId', 'createdAt']).index('by_expiresAt', ['expiresAt']),
+  // A named set of the owner's connected accounts, across platforms, picked together when posting (convex/postingGroups.ts).
+  // An account can sit in several groups; disconnecting it removes it from every group. `isDefault`: the one group the
+  // assistant posts to when the user names no accounts (at most one per owner).
+  postingGroups: defineTable({
+    ownerId: v.string(), name: v.string(), accountIds: v.array(v.id('postingAccounts')), isDefault: v.optional(v.boolean()),
+    createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_owner', ['ownerId', 'createdAt']),
 };

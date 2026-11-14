@@ -2,9 +2,10 @@ import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner, requireProject } from './lib/auth';
+import { groupAccounts, ownerGroups, sameName } from './lib/posting_groups';
 import { accountState, batchText, cancelPostFor, notSent, postChoices, requirePosting, reschedulePostFor, scheduleTime } from './posting';
 import { clipShape, exportPlan, pendingForKey, startPendingFor } from './postExports';
-import { postTarget, postVisibility, tiktokChoices, tiktokCreator } from './postingTables';
+import { postTarget, postVisibility, tiktokChoices, tiktokCreator, tiktokVisibility } from './postingTables';
 import { tabsOf, storedTabTimeline } from './timelineTabs';
 import { MAX_EXPORT_LABEL, MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
@@ -27,6 +28,8 @@ const request = {
   projectId: v.id('projects'), timelineIds: v.array(v.string()), targets: v.array(postTarget), caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()),
   /** What TikTok said each chosen TikTok account may do, read by the tool just before this call (postingActions.tiktokCreatorFor). */
   tiktokCreators: v.array(tiktokCreator),
+  /** The account group the request was made from (its accounts are in `targets`), and its accounts left out because they need reconnecting. */
+  groupId: v.optional(v.id('postingGroups')), skippedAccountIds: v.optional(v.array(v.id('postingAccounts'))),
 };
 const requestObject = v.object(request);
 type PostRequest = Infer<typeof requestObject>;
@@ -46,6 +49,38 @@ export const accounts = internalQuery({
         visibility: row.platform === 'youtube' ? 'Always public: YouTube videos cannot be posted as unlisted or private from Revline.' : row.platform === 'tiktok' ? [...VISIBILITY_OPTIONS.tiktok] : 'Instagram has no per-post visibility.',
       };
     });
+  },
+});
+
+/** The owner's account groups as the posting tools list them: each group's accounts and which of them can be posted to now. */
+export const groups = internalQuery({
+  args: { ownerId: v.string() }, returns: v.any(),
+  handler: async (ctx, { ownerId }) => {
+    const live = postingReady();
+    return Promise.all((await ownerGroups(ctx, ownerId)).map(async group => ({
+      groupId: group._id, name: group.name, ...(group.isDefault ? { isDefault: true } : {}),
+      accounts: (await groupAccounts(ctx, group)).map(account => {
+        const state = accountState(account);
+        return { accountId: account._id, platform: account.platform, handle: `@${account.username}`, canPost: live && state.status === 'connected', ...(state.status === 'needs_reconnect' ? { needsReconnect: true } : {}) };
+      }),
+    })));
+  },
+});
+
+/**
+ * The accounts a group stands for, for postVideo and schedulePost: `group` is a groupId or a group's name (ignoring
+ * case). Accounts that need reconnecting are left out and returned as `skipped`, so the post still goes to the others.
+ */
+export const groupTargets = internalQuery({
+  args: { ownerId: v.string(), group: v.string() }, returns: v.any(),
+  handler: async (ctx, { ownerId, group: wanted }) => {
+    const groups = await ownerGroups(ctx, ownerId), id = ctx.db.normalizeId('postingGroups', wanted);
+    const group = groups.find(item => item._id === id) ?? groups.find(item => sameName(item.name, wanted));
+    if (!group) throw new ConvexError(groups.length ? `No group called "${wanted}". This user's groups: ${groups.map(item => item.name).join(', ')}. Call listConnectedAccounts for their groupIds, or ask which accounts to post to.` : 'This user has no account groups. Ask which accounts to post to, or suggest making a group on the Accounts page (/accounts).');
+    const accounts = await groupAccounts(ctx, group);
+    const ready = accounts.filter(account => accountState(account).status === 'connected'), skipped = accounts.filter(account => accountState(account).status !== 'connected');
+    if (!ready.length) throw new ConvexError(accounts.length ? `Every account in ${group.name} needs reconnecting. The user reconnects them on the Accounts page (/accounts).` : `${group.name} has no accounts yet. The user adds accounts to it on the Accounts page (/accounts), or names the accounts to post to.`);
+    return { groupId: group._id, name: group.name, accounts: ready.map(account => ({ accountId: account._id, platform: account.platform })), skipped: skipped.map(account => account._id) };
   },
 });
 
@@ -131,10 +166,18 @@ async function plan(ctx: QueryCtx | MutationCtx, ownerId: string, args: PostRequ
     });
   }
   const needsExport = clips.filter(clip => clip.exports).length, posts = clips.length * accounts.length;
+  const group = args.groupId ? await ctx.db.get(args.groupId) : null;
+  if (args.groupId && (!group || group.ownerId !== ownerId)) throw new ConvexError('That account group no longer exists. Call listConnectedAccounts for the current groups.');
+  const skipped = [];
+  for (const accountId of args.skippedAccountIds ?? []) {
+    const account = await ctx.db.get(accountId);
+    if (account && account.ownerId === ownerId && account.status !== 'disconnected') skipped.push({ accountId, platform: account.platform, handle: `@${account.username}`, reason: 'needs reconnecting on the Accounts page (/accounts)' });
+  }
   return {
     project, caption, title, targets: accounts.map(item => item.target),
     view: {
       project: project.title, clips: clips.map(({ exports: _exports, ...clip }) => clip), accounts: accounts.map(item => item.view),
+      ...(group ? { group: group.name } : {}), ...(skipped.length ? { skipped, skippedNote: `${skipped.length} ${skipped.length === 1 ? 'account' : 'accounts'} of ${group?.name ?? 'the group'} ${skipped.length === 1 ? 'needs' : 'need'} reconnecting and ${skipped.length === 1 ? 'is' : 'are'} skipped; the others still get the post. Tell the user which, and that they reconnect on the Accounts page.` } : {}),
       ...(args.scheduledAt !== undefined ? { scheduledFor: iso(args.scheduledAt) } : { when: 'now, as soon as each clip is exported' }),
       posts,
       summary: `${needsExport ? `Will export ${needsExport === clips.length ? (clips.length === 1 ? 'the clip' : `${clips.length} clips`) : `${needsExport} of ${clips.length} clips`} and ` : 'Will '}${args.scheduledAt !== undefined ? 'schedule' : 'post'} ${posts} ${posts === 1 ? 'post' : 'posts'}: ${clips.map(clip => `"${clip.name}"`).join(', ')} to ${accounts.map(item => `${item.view.handle} on ${PLATFORM_NAMES[item.account.platform]}`).join(', ')}${args.scheduledAt !== undefined ? ` at ${iso(args.scheduledAt)}` : ''}.`,
@@ -160,6 +203,7 @@ export const propose = internalMutation({
       ownerId, projectId: checked.project._id, timelineIds: args.timelineIds, targets: checked.targets, caption: checked.caption, ...(checked.title ? { title: checked.title } : {}),
       ...(args.scheduledAt !== undefined ? { scheduledAt: args.scheduledAt } : {}), status: 'proposed', createdAt: now, expiresAt: now + PROPOSAL_MS,
       ...(args.tiktokCreators.length ? { tiktokCreators: args.tiktokCreators } : {}),
+      ...(args.groupId ? { groupId: args.groupId } : {}), ...(args.skippedAccountIds?.length ? { skippedAccountIds: args.skippedAccountIds } : {}),
     });
     return {
       awaitingConfirmation: true, proposalId, ...checked.view,
@@ -228,6 +272,12 @@ export const proposal = query({
     /** When an unconfirmed card stops working; the card compares it with its own clock. */
     expiresAt: v.number(), scheduledAt: v.union(v.number(), v.null()), clips: v.array(v.object({ timelineId: v.string(), name: v.string(), exports: v.boolean() })),
     accounts: v.array(v.object({ accountId: v.id('postingAccounts'), platform: v.union(v.literal('instagram'), v.literal('tiktok'), v.literal('youtube')), username: v.string(), caption: v.string(), title: v.union(v.string(), v.null()), visibility: v.union(postVisibility, v.null()), tiktok: v.union(tiktokChoices, v.null()) })),
+    /** The group the assistant chose (null: single accounts) and the accounts of it skipped because they need reconnecting. */
+    groupId: v.optional(v.union(v.id('postingGroups'), v.null())), skippedAccountIds: v.optional(v.array(v.id('postingAccounts'))),
+    /** Who can view a post on each TikTok account TikTok answered for when the card was made: what the card offers for a TikTok account the user adds. */
+    tiktokLevels: v.optional(v.array(v.object({ accountId: v.id('postingAccounts'), levels: v.array(tiktokVisibility) }))),
+    /** The shared caption and title, which an account the user adds on the card posts with. */
+    caption: v.optional(v.string()), title: v.optional(v.union(v.string(), v.null())),
   })),
   handler: async (ctx, { proposalId }) => {
     const ownerId = await requireOwner(ctx), row = await ctx.db.get(proposalId);
@@ -244,22 +294,34 @@ export const proposal = query({
       const account = await ctx.db.get(target.accountId);
       accounts.push({ accountId: target.accountId, platform: account?.platform ?? 'youtube' as const, username: account?.username ?? 'removed account', caption: target.caption ?? row.caption, title: target.title ?? row.title ?? null, visibility: target.visibility ?? null, tiktok: target.tiktok ?? null });
     }
-    return { status: proposalState(row, Date.now()), expiresAt: row.expiresAt, scheduledAt: row.scheduledAt ?? null, clips, accounts };
+    const tiktokLevels = (row.tiktokCreators ?? []).filter(creator => !creator.error && creator.privacyLevels?.length).map(creator => ({ accountId: creator.accountId, levels: creator.privacyLevels! }));
+    return { status: proposalState(row, Date.now()), expiresAt: row.expiresAt, scheduledAt: row.scheduledAt ?? null, clips, accounts, groupId: row.groupId ?? null, skippedAccountIds: row.skippedAccountIds ?? [], tiktokLevels, caption: row.caption, title: row.title ?? null };
   },
 });
 
-/** The user pressed the card: export each clip that needs it and create the posts. Pressing twice creates them once. */
+/**
+ * The user pressed the card: export each clip that needs it and create the posts. Pressing twice creates them once.
+ * `accountIds`: the accounts the user left ticked or switched to on the card (absent: the assistant's). An account
+ * the assistant did not choose takes the shared caption, and on TikTok the `visibility` the user picked on the card.
+ */
 export const confirmProposal = mutation({
-  args: { proposalId: v.id('postingProposals') }, returns: v.null(),
-  handler: async (ctx, { proposalId }) => {
-    const { ownerId, proposal: row } = await ownedProposal(ctx, proposalId), now = Date.now();
+  args: {
+    proposalId: v.id('postingProposals'), accountIds: v.optional(v.array(v.id('postingAccounts'))), groupId: v.optional(v.union(v.id('postingGroups'), v.null())),
+    visibility: v.optional(v.array(v.object({ accountId: v.id('postingAccounts'), visibility: tiktokVisibility }))),
+  },
+  returns: v.null(),
+  handler: async (ctx, { proposalId, accountIds, groupId, visibility }) => {
+    const { ownerId, proposal: proposed } = await ownedProposal(ctx, proposalId), now = Date.now();
+    const picked = (accountId: Id<'postingAccounts'>) => visibility?.find(item => item.accountId === accountId)?.visibility;
+    const row = accountIds ? { ...proposed, targets: accountIds.map(accountId => proposed.targets.find(target => target.accountId === accountId) ?? { accountId, ...(picked(accountId) ? { visibility: picked(accountId) } : {}) }) } : proposed;
     if (row.status === 'confirmed') return null;
+    if (groupId) { const group = await ctx.db.get(groupId); if (!group || group.ownerId !== ownerId) throw new ConvexError('That group no longer exists. Pick another one.'); }
     if (proposalState(row, now) !== 'proposed') throw new ConvexError(row.status === 'cancelled' ? 'This post was cancelled. Ask the assistant again to post it.' : 'This confirmation expired. Ask the assistant again to post it.');
     // The clip may have been edited and an account disconnected since the card was made: everything is checked again
     // against the project as it is now. (Each platform's limits are checked again when the post is sent.)
     const checked = await plan(ctx, ownerId, { projectId: row.projectId, timelineIds: row.timelineIds, targets: row.targets, caption: row.caption, ...(row.title ? { title: row.title } : {}), ...(row.scheduledAt !== undefined ? { scheduledAt: row.scheduledAt } : {}), tiktokCreators: row.tiktokCreators ?? [] }, row.scheduledAt !== undefined);
     const created = await createPending(ctx, ownerId, { projectId: row.projectId, timelineIds: row.timelineIds, targets: checked.targets, caption: checked.caption, title: checked.title, scheduledAt: row.scheduledAt, key: `proposal:${proposalId}` });
-    await ctx.db.patch(proposalId, { status: 'confirmed', pendingIds: created.map(item => item.pendingId) });
+    await ctx.db.patch(proposalId, { status: 'confirmed', pendingIds: created.map(item => item.pendingId), ...(accountIds ? { targets: checked.targets } : {}), ...(groupId !== undefined && groupId !== (proposed.groupId ?? null) ? { groupId: groupId ?? undefined, skippedAccountIds: undefined } : {}) });
     return null;
   },
 });

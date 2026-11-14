@@ -3,6 +3,7 @@ import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
+import { dropFromGroups } from './lib/posting_groups';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ownedObjectReferences } from './lib/storage_accounting';
@@ -140,6 +141,7 @@ export async function markDisconnected(ctx: MutationCtx, account: Doc<'postingAc
   await ctx.db.patch(account._id, { status: 'disconnected', tokenCipher: undefined, tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, avatarStorageId: undefined, avatarCheckedAt: undefined, updatedAt: now });
   const waiting = await ctx.db.query('postingPosts').withIndex('by_account_status', q => q.eq('accountId', account._id).eq('status', 'scheduled')).collect();
   for (const post of waiting) await ctx.db.patch(post._id, { status: 'failed', error: 'This account was disconnected before the post went out.', updatedAt: now });
+  await dropFromGroups(ctx, account.ownerId, account._id, now);
 }
 /**
  * Disconnect an account: it is gone for the user at once, then removed at Post Bridge, which ends its access to the

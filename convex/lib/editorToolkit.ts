@@ -197,7 +197,8 @@ const POST_INPUT = {
     title: z.string().max(TITLE_LIMIT).optional().describe('This account’s own title (YouTube).'),
     visibility: z.enum([...YOUTUBE_VISIBILITIES, ...TIKTOK_VISIBILITIES]).optional().describe('Who can view the post. YouTube: always public; omit it (unlisted and private are refused). TikTok: required, PUBLIC_TO_EVERYONE or SELF_ONLY (friends-only and followers-only are refused); the user chooses, there is no default. Instagram: none.'),
     tiktok: z.object({ allowComment: z.boolean().optional(), allowDuet: z.boolean().optional(), allowStitch: z.boolean().optional(), yourBrand: z.boolean().optional().describe('The video promotes the user’s own business.'), brandedContent: z.boolean().optional().describe('A paid partnership. Not with SELF_ONLY.') }).strict().optional().describe('TikTok only. Each is off unless the user asks for it.'),
-  }).strict()).min(1).max(20).describe('The connected accounts to post to.'),
+  }).strict()).min(1).max(20).optional().describe('The connected accounts to post to. With groupId: only accounts that need their own caption or settings (TikTok visibility), or extra accounts beyond the group.'),
+  groupId: z.string().min(1).optional().describe('An account group from listConnectedAccounts (its groupId, or its name as the user said it): posts to every account in it. Accounts in it that need reconnecting are skipped and the rest still post. Use the default group when the user asks to post without naming accounts.'),
   caption: z.string().max(CAPTION_LIMIT).describe(`The caption every account uses unless it has its own, up to ${CAPTION_LIMIT} characters (YouTube: the description).`),
   title: z.string().max(TITLE_LIMIT).optional().describe(`Title for YouTube, up to ${TITLE_LIMIT} characters. Without one, the caption’s first line.`),
   confirm: z.boolean().optional().describe('MCP clients only: true sends the posts, after the user agreed to the preview this call returns without it. The Revline editor ignores it and shows a confirmation card.'),
@@ -891,12 +892,21 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const posting = async <T,>(work: () => Promise<T>) => { try { return await work(); } catch (error) { throw postRefusal(error); } };
   const sendPosts = (input: z.infer<z.ZodObject<typeof POST_INPUT>>, scheduledAt: number | undefined) => posting(async () => {
     const overMcp = isMcpRun(run.runId), schedule = scheduledAt !== undefined, owner = { ownerId: run.ownerId };
-    const platforms = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ...owner, accountIds: input.accounts.map(account => account.accountId) }) as { accountId: Id<'postingAccounts'>; platform: string }[];
-    // What each TikTok account's post can be given, which the preview and the confirmation card state.
-    const tiktokCreators = await Promise.all(platforms.filter(account => account.platform === 'tiktok').map(account => ctx.runAction(internal.postingActions.tiktokCreatorFor, { ...owner, accountId: account.accountId })));
+    if (!input.accounts?.length && !input.groupId) throw new Error('Name the accounts to post to (accounts) or an account group (groupId) from listConnectedAccounts. When the user named neither, use their default group; with no default group, ask them which group or accounts.');
+    // A group stands for its accounts that can be posted to now; entries in `accounts` add to it or give one of its accounts its own settings.
+    const group = input.groupId ? await ctx.runQuery(internal.assistantPosting.groupTargets, { ...owner, group: input.groupId }) as { groupId: Id<'postingGroups'>; accounts: { accountId: Id<'postingAccounts'>; platform: string }[]; skipped: Id<'postingAccounts'>[] } : null;
+    const named = input.accounts ?? [];
+    const platforms = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ...owner, accountIds: named.map(account => account.accountId) }) as { accountId: Id<'postingAccounts'>; platform: string }[];
+    const own = named.map((account, index) => ({ ...account, accountId: platforms[index].accountId }));
+    const targets = group ? [...group.accounts.map(member => own.find(account => account.accountId === member.accountId) ?? { accountId: member.accountId }), ...own.filter(account => !group.accounts.some(member => member.accountId === account.accountId))] : own;
+    // What each TikTok account's post can be given, which the preview and the confirmation card state. In the editor,
+    // every connected TikTok account is read, so the card can offer them when the user switches group.
+    const listed = overMcp ? [] : (await ctx.runQuery(internal.assistantPosting.accounts, owner) as { accountId: Id<'postingAccounts'>; platform: string; status: string }[]).filter(account => account.platform === 'tiktok' && account.status === 'connected').map(account => account.accountId);
+    const targetTikTok = [...platforms, ...(group?.accounts ?? [])].filter(account => account.platform === 'tiktok').map(account => account.accountId);
+    const tiktokCreators = await Promise.all([...new Set([...targetTikTok, ...listed])].map(accountId => ctx.runAction(internal.postingActions.tiktokCreatorFor, { ...owner, accountId })));
     const request = {
-      projectId: run.projectId, timelineIds: input.timelineIds ?? [timelineId], caption: input.caption, ...(input.title ? { title: input.title } : {}), ...(schedule ? { scheduledAt } : {}), tiktokCreators,
-      targets: input.accounts.map((account, index) => ({ ...account, accountId: platforms[index].accountId })),
+      projectId: run.projectId, timelineIds: input.timelineIds ?? [timelineId], caption: input.caption, ...(input.title ? { title: input.title } : {}), ...(schedule ? { scheduledAt } : {}), tiktokCreators, targets,
+      ...(group ? { groupId: group.groupId, ...(group.skipped.length ? { skippedAccountIds: group.skipped } : {}) } : {}),
     };
     if (!overMcp) {
       // The card posts the saved timeline, so this request's edits are checked and saved first, as before an export.
@@ -1117,9 +1127,14 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     cancelExport: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.cancelExport, description: "Stop a queued or rendering export of this project by jobId, when the user asks or it is stuck. Saved edits and finished exports are untouched.", inputSchema: z.object({ jobId: z.string().min(1) }).strict(), execute: async (_ctx, { jobId }) => ctx.runMutation(internal.mcp.cancelExport, { ownerId: run.ownerId, projectId: run.projectId, jobId }) }),
 
     // Posting to the user's connected social accounts (convex/assistantPosting.ts). Loaded with the posting capability.
-    listConnectedAccounts: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listConnectedAccounts, description: "The user's connected social accounts (YouTube, TikTok, Instagram): accountId, platform, handle, status and whether one needs reconnecting. Call before postVideo or schedulePost to find the accountIds the user means. The user connects and reconnects accounts on the Accounts page (/accounts); no tool does that.", inputSchema: z.object({}), execute: async () => {
+    listConnectedAccounts: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listConnectedAccounts, description: "The user's connected social accounts (YouTube, TikTok, Instagram): accountId, platform, handle, status and whether one needs reconnecting; and their account groups (named sets of accounts, one possibly their default). Call before postVideo or schedulePost to find the accounts or group the user means. The user connects and reconnects accounts and manages groups on the Accounts page (/accounts); no tool does that.", inputSchema: z.object({}), execute: async () => {
       const accounts = await ctx.runQuery(internal.assistantPosting.accounts, { ownerId: run.ownerId }) as unknown[];
-      return { accounts, ...(accounts.length ? {} : { next: 'No account is connected. The user connects one on the Accounts page (/accounts); then posting is possible.' }) };
+      const groups = await ctx.runQuery(internal.assistantPosting.groups, { ownerId: run.ownerId }) as { name: string; isDefault?: boolean }[];
+      const fallback = groups.find(group => group.isDefault);
+      return {
+        accounts, groups,
+        ...(accounts.length ? { next: fallback ? `When the user asks to post without naming accounts, post to their default group ${fallback.name} (groupId). A group they name ("post to ${fallback.name}") is matched by its name.` : groups.length ? 'No group is the default: when the user asks to post without naming accounts, ask which group or accounts, even if an earlier request in this chat used one (unless they say "same as before"). A group they name is matched by its name.' : 'The user has no account groups; post to the accounts they name, and ask when they named none.' } : { next: 'No account is connected. The user connects one on the Accounts page (/accounts); then posting is possible.' }),
+      };
     } }),
     postVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.postVideo, description: `${POST_RULE} Post clips (timeline tabs of this project) to the user's connected accounts now: one post per clip per account. ${POST_FLOW}`, inputSchema: z.object(POST_INPUT).strict(), execute: async (_ctx, input) => sendPosts(input, undefined) }),
     schedulePost: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.schedulePost, description: `${POST_RULE} Schedule clips (timeline tabs of this project) to the user's connected accounts at a later time: one post per clip per account. Each clip is exported now and sent at the time; later edits do not change the confirmed version. ${POST_FLOW}`, inputSchema: z.object({ ...POST_INPUT, scheduledAt: z.string().describe('When to post: ISO 8601 with a UTC offset, e.g. 2026-11-14T18:00:00-05:00. In the future, within 90 days.') }).strict(), execute: async (_ctx, { scheduledAt, ...input }) => {

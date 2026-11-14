@@ -90,6 +90,7 @@ import type * as lib_normalization_validator from "../lib/normalization_validato
 import type * as lib_pacing_validator from "../lib/pacing_validator.js";
 import type * as lib_pixel_track_validator from "../lib/pixel_track_validator.js";
 import type * as lib_plan_limits from "../lib/plan_limits.js";
+import type * as lib_posting_groups from "../lib/posting_groups.js";
 import type * as lib_processor_backend from "../lib/processor_backend.js";
 import type * as lib_processor_capabilities from "../lib/processor_capabilities.js";
 import type * as lib_project_data from "../lib/project_data.js";
@@ -138,6 +139,7 @@ import type * as postExports from "../postExports.js";
 import type * as posting from "../posting.js";
 import type * as postingActions from "../postingActions.js";
 import type * as postingBridge from "../postingBridge.js";
+import type * as postingGroups from "../postingGroups.js";
 import type * as postingTables from "../postingTables.js";
 import type * as processorDiagnostics from "../processorDiagnostics.js";
 import type * as projectDataMigration from "../projectDataMigration.js";
@@ -251,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pacing_validator": typeof lib_pacing_validator;
   "lib/pixel_track_validator": typeof lib_pixel_track_validator;
   "lib/plan_limits": typeof lib_plan_limits;
+  "lib/posting_groups": typeof lib_posting_groups;
   "lib/processor_backend": typeof lib_processor_backend;
   "lib/processor_capabilities": typeof lib_processor_capabilities;
   "lib/project_data": typeof lib_project_data;
@@ -299,6 +302,7 @@ declare const fullApi: ApiFromModules<{
   posting: typeof posting;
   postingActions: typeof postingActions;
   postingBridge: typeof postingBridge;
+  postingGroups: typeof postingGroups;
   postingTables: typeof postingTables;
   processorDiagnostics: typeof processorDiagnostics;
   projectDataMigration: typeof projectDataMigration;
