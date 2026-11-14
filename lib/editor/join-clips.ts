@@ -60,14 +60,16 @@ export function soundMisalignments(input: Timeline, audioAssetOf: AudioAssetOf =
 }
 
 /** Put each footage piece's own unlinked sound back in sync with its picture and on the same in/out: the sound a user
- *  split and nudged apart. Only a sound that belongs to one picture, without a J/L split edit (audioSeparated), moves;
+ *  split and nudged apart. Only a sound that belongs to one picture moves; after a J/L split edit (audioSeparated) only drift is corrected and the edges stay;
  *  linked pairs are kept equal by every edit already. Returns the sound clips it moved. */
 export function alignSounds(input: Timeline, audioAssetOf: AudioAssetOf = () => undefined, onlyVideoIds?: ReadonlySet<string>): { timeline: Timeline; aligned: string[] } {
   const timeline = normalizeTimeline(input), patches = new Map<string, Partial<Clip>>();
   for (const item of soundMisalignments(timeline, audioAssetOf)) {
     const video = timeline.clips.find(clip => clip.id === item.videoClipId)!, sound = timeline.clips.find(clip => clip.id === item.audioClipId)!;
-    if (item.shared || sound.linkedClipId || video.audioSeparated || (onlyVideoIds && !onlyVideoIds.has(video.id)) || patches.has(sound.id)) continue;
-
+    if (item.shared || sound.linkedClipId || (onlyVideoIds && !onlyVideoIds.has(video.id)) || patches.has(sound.id)) continue;
+    const drifting = Math.abs(item.outOfSyncSeconds) > .5 / timeline.fps;
+    // A J/L split edit (audioSeparated) keeps its own edges and is never out of sync: only drift is corrected there.
+    if (video.audioSeparated) { if (drifting) patches.set(sound.id, { sourceStart: video.sourceStart + (sound.start - video.start) * playbackRateOf(video) }); continue; }
     patches.set(sound.id, { start: video.start, duration: video.duration, sourceStart: video.sourceStart });
   }
   if (!patches.size) return { timeline: input, aligned: [] };

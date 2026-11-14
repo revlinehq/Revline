@@ -129,8 +129,8 @@ export function captionSyncFailures(
 
 /** Captions follow their speech through an edit that moved footage (trim, move, join, closing gaps): each caption that
  *  said the words under it, with all of them still playing, is shifted by how far its first and last word moved, through
- *  setCaptionTiming's rules, so neighbouring captions stay in order. A caption that was already out of step with the
- *  speech stays put (moving it would carry the drift along). A caption left over footage that was deleted, sitting over a
+ *  setCaptionTiming's rules, so neighbouring captions stay in order. A caption that was out of step with the speech
+ *  snaps onto its own words (spoken within 1.5 s of it) when those words moved in this edit. A caption left over footage that was deleted, sitting over a
  *  gap this edit closed and over none of its words now, is removed and reported: it would otherwise caption other words. */
 export function followSpeechCaptions(before: Timeline, after: Timeline, assets: Parameters<typeof retainedSpeechWords>[1]): { timeline: Timeline; followed: string[]; stranded: { clipId: string; text: string }[]; trimmed: CaptionNeighbourChange[] } {
   if (!after.clips.some(clip => clip.kind === 'caption')) return { timeline: after, followed: [], stranded: [], trimmed: [] };
@@ -145,6 +145,13 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
   const moves: { id: string; start: number; end: number; delta: number }[] = [], stranded: { clipId: string; text: string }[] = [];
   const gapsBefore = footageGaps(before), gapsAfter = footageGaps(after);
   const closedGap = (start: number, end: number) => gapsBefore.some(gap => start >= gap.start - frame && end <= gap.end + frame) && !gapsAfter.some(gap => start >= gap.start - frame && end <= gap.end + frame);
+  // Fallback for a caption whose words cannot place it (a word cut at a piece edge): it moves with the footage under it.
+  const withFootage = (old: { id: string; start: number; duration: number }) => {
+    const under = before.clips.find(clip => (clip.kind === 'video' || clip.kind === 'image') && clip.start <= old.start + 1e-6 && old.start < clip.start + clip.duration - 1e-6);
+    const moved = under && after.clips.find(clip => clip.id === under.id);
+    const delta = moved ? moved.start - under!.start : 0;
+    if (Math.abs(delta) >= frame / 2) moves.push({ id: old.id, start: Math.max(0, old.start + delta), end: Math.max(0, old.start + old.duration + delta), delta });
+  };
   for (const caption of after.clips) {
     if (caption.kind !== 'caption') continue;
     const old = before.clips.find(clip => clip.id === caption.id);
@@ -155,7 +162,26 @@ export function followSpeechCaptions(before: Timeline, after: Timeline, assets: 
       if (closedGap(old.start, end) && !says(caption.text ?? '', within(now, caption.start, caption.start + caption.duration))) stranded.push({ clipId: caption.id, text: caption.text ?? '' });
       continue;
     }
-    if (!says(caption.text ?? '', inside) || inside.some(word => !word.word || count.get(word.word) !== 1)) continue;
+    if (!says(caption.text ?? '', inside)) {
+      // Out of step with the speech (say, the picture was nudged under it): when its own words, spoken within 1.5 s of it,
+      // moved in this edit, it snaps onto them where they now play.
+      const target = plain(caption.text ?? ''), run: SpokenWord[] = [];
+      for (let from = 0; target && from < was.length && !run.length; from++) {
+        if (Math.abs(was[from].start - old.start) > 1.5) continue;
+        let text = '';
+        for (let to = from; to < was.length && to - from < 8; to++) {
+          text = `${text} ${plain(was[to].text)}`.trim();
+          if (text === target) { run.push(...was.slice(from, to + 1)); break; }
+          if (!target.startsWith(text)) break;
+        }
+      }
+      if (!run.length || run.some(word => !word.word || count.get(word.word) !== 1)) { withFootage(old); continue; }
+      const first = at.get(run[0].word!)!, last = at.get(run.at(-1)!.word!)!;
+      if (Math.abs(first.start - run[0].start) < frame / 2) continue;
+      moves.push({ id: caption.id, start: first.start, end: Math.max(first.start + frame, last.end), delta: first.start - old.start });
+      continue;
+    }
+    if (inside.some(word => !word.word || count.get(word.word) !== 1)) { withFootage(old); continue; }
     const first = at.get(inside[0].word!)!, last = at.get(inside.at(-1)!.word!)!;
     const startDelta = first.start - inside[0].start, endDelta = last.end - inside.at(-1)!.end;
     if (Math.abs(startDelta) < frame / 2 && Math.abs(endDelta) < frame / 2) continue;
