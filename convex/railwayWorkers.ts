@@ -125,6 +125,22 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       if (fallbacks.length) return fallbacks.slice(0, 3);
       return hold === 'expired' && latest.status === 'CRASHED' ? [latest] : null;
     };
+    /** A running slot whose latest build failed keeps its older build and is never started, so startableBuilds never
+     *  sees the failure (2026-11-14: the processor ran 15 commits behind main unnoticed). Reported once per lane and
+     *  build per hold, through the same hold and incident as a boot crash. */
+    const reportFailedBuild = async (instance: { latestDeployment: Deployment | null }, lane: string) => {
+      const latest = instance.latestDeployment;
+      if (latest?.status !== 'FAILED') return;
+      const build = railwayDeploymentCommit(latest) ?? latest.id;
+      const key = `${lane}:${build}`;
+      if (holds.has(key)) return;
+      const hold = await ctx.runMutation(internal.railwayWorkers.holdBootCrash, { lane, build });
+      holds.set(key, hold);
+      if (hold === 'held') return;
+      const message = `Railway ${lane} build ${build.slice(0, 12)} failed to build; the slot keeps running its previous build until a build of main succeeds.`;
+      console.error(message);
+      await ctx.runMutation(internal.incidents.reportIncident, { source: 'railway', kind: 'worker-boot-crash', message, context: { location: 'convex/railwayWorkers:dispatch', taskKind: lane, event: 'build-failed' }, deployment: 'server' }).catch(() => undefined);
+    };
     /** Start a stopped slot. Never a chosen commit: the slot's own latest build (Railway autodeploys main), unless that
      *  build crashed on boot. Whether it started. */
     const startSlot = async (instance: Instance, lane: string) => {
@@ -151,14 +167,18 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       for (const serviceId of pool.demand.waiting ? pool.ids : alwaysOn) {
         if (Date.now() >= deadline) return null;
         // With nothing queued, a running always-on slot costs one read, not the full settings check.
-        if (!pool.demand.waiting && railwayActive(await railwayInstance({ ...target, serviceId }))) continue;
+        if (!pool.demand.waiting) {
+          const running = await railwayInstance({ ...target, serviceId });
+          if (railwayActive(running)) { await reportFailedBuild(running, pool.name); continue; }
+        }
         instances.push(await verifyRailwaySlot({ ...target, serviceId, image: pool.image }));
       }
       const active = instances.filter(railwayActive).length;
       let needed = Math.max(0, pool.demand.waiting - Math.max(0, active - pool.demand.running));
       for (const instance of instances) {
         if (Date.now() >= deadline) break;
-        if (railwayActive(instance) || (needed === 0 && !alwaysOn.includes(instance.serviceId))) continue;
+        if (railwayActive(instance)) { await reportFailedBuild(instance, pool.name); continue; }
+        if (needed === 0 && !alwaysOn.includes(instance.serviceId)) continue;
         if (await startSlot(instance, pool.name)) needed = Math.max(0, needed - 1);
       }
     }
