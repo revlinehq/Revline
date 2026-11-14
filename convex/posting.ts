@@ -348,6 +348,8 @@ export const createFileBatch = mutation({
   handler: async (ctx, { fileId, ...args }) => {
     const ownerId = await requireOwner(ctx); requirePosting();
     const row = await ctx.db.get(fileId);
+    // An archived file is hidden from the Library, so it is not scheduled; a post scheduled before archiving still goes out.
+    if (row?.ownerId === ownerId && row.archivedAt !== undefined) throw new ConvexError('Restore this file from the archive before scheduling it.');
     return createBatchFor(ctx, ownerId, { ...args, ...(row?.kind === 'export' && row.ownerId === ownerId && row.jobId ? { jobId: row.jobId } : { fileId }) });
   },
 });
