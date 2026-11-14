@@ -1,0 +1,1 @@
+- Library: list view and search removed; Archived is an icon in the top bar, and sort/filter and New folder are icon buttons beside Upload. Why: the founder asked for a lighter Library toolbar.

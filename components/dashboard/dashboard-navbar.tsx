@@ -18,7 +18,7 @@ export function DashboardNavbar() {
   return <header className="dash-navbar">
     <SidebarTrigger className="dash-navbar-menu" aria-label="Open the menu" />
     <span className="dash-navbar-title">{dashboardPageTitle(pathname)}</span>
-    {/* A page may put its own actions here (createPortal); the Library shows New folder and Upload on a phone. */}
+    {/* A page may put its own actions here (createPortal): the Library shows its Archived switch, and New folder and Upload on a phone. */}
     <div className="dash-navbar-actions"><div id="dash-navbar-page" className="dash-navbar-page" /><WorkspaceAccountMenu /></div>
   </header>;
 }
